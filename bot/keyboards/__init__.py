@@ -1,0 +1,57 @@
+"""
+Клавиатуры для Telegram UI.
+"""
+
+from .keyboards import (
+    CBT,
+    get_main_menu,
+    get_main_menu_page_2,
+    get_global_switches_menu,
+    get_notifications_menu,
+    get_auto_delivery_lots_menu,
+    get_auto_ticket_settings_menu,
+    get_lot_edit_menu,
+    get_back_button,
+    get_blacklist_menu,
+    get_blacklist_user_edit_menu,
+    get_plugins_menu,
+    get_plugin_info_menu,
+    get_order_confirm_response_menu,
+    get_review_response_menu,
+    get_configs_menu,
+    get_authorized_users_menu,
+    get_select_template_menu,
+    get_templates_menu,
+    get_template_detail_menu,
+    get_template_edit_menu,
+    get_custom_commands_menu,
+)
+from .plugins import plugins_list, edit_plugin, plugin_commands
+
+__all__ = [
+    'CBT',
+    'get_main_menu',
+    'get_main_menu_page_2',
+    'get_global_switches_menu',
+    'get_notifications_menu',
+    'get_auto_delivery_lots_menu',
+    'get_lot_edit_menu',
+    'get_back_button',
+    'get_blacklist_menu',
+    'get_blacklist_user_edit_menu',
+    'get_plugins_menu',
+    'get_plugin_info_menu',
+    'get_order_confirm_response_menu',
+    'get_review_response_menu',
+    'get_configs_menu',
+    'get_authorized_users_menu',
+    'get_select_template_menu',
+    'get_templates_menu',
+    'get_template_detail_menu',
+    'get_template_edit_menu',
+    'get_custom_commands_menu',
+    'get_auto_ticket_settings_menu',
+    'plugins_list',
+    'edit_plugin',
+    'plugin_commands',
+]
