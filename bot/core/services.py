@@ -454,3 +454,102 @@ class StarvellService:
         except Exception as e:
             # Пробрасываем исключение дальше для обработки wait time
             raise RuntimeError(f"Ошибка поднятия лотов: {e}")
+
+    # ==================== Методы для автодемпера ====================
+
+    async def get_my_lots(self) -> List[Dict[str, Any]]:
+        """
+        Получить список своих активных лотов
+
+        Returns:
+            list: Список активных лотов с полями:
+                - id: ID лота
+                - title: Название
+                - price: Цена
+                - gameId: ID игры
+                - categoryId: ID категории
+                - active: Активен ли лот
+        """
+        try:
+            lots = await self.get_lots()
+            # Фильтруем только активные
+            active_lots = [lot for lot in lots if lot.get("active", False)]
+            return active_lots
+        except Exception as e:
+            logger.error(f"Ошибка получения своих лотов: {e}")
+            return []
+
+    async def get_competitors(self, game_id: int, category_id: int) -> List[Dict[str, Any]]:
+        """
+        Получить список конкурентов в категории
+
+        Args:
+            game_id: ID игры
+            category_id: ID категории
+
+        Returns:
+            list: Список лотов конкурентов с полями:
+                - id: ID лота
+                - price: Цена
+                - userId: ID продавца
+                - sellerName: Имя продавца
+                - sellerReviews: Количество отзывов
+                - active: Активен ли лот
+        """
+        if not self.api:
+            raise RuntimeError("API не инициализирован")
+
+        try:
+            # Получаем свой user_id чтобы исключить свои лоты
+            user_info = await self.get_user_info()
+            my_user_id = user_info.get("user", {}).get("id")
+
+            # Получаем все офферы в категории
+            # TODO: Нужно реализовать метод get_category_offers в api/client.py
+            # Пока возвращаем пустой список
+            logger.warning("Метод get_competitors требует реализации get_category_offers в API")
+            return []
+
+            # Когда метод будет реализован:
+            # all_offers = await self.api.get_category_offers(game_id, category_id)
+            #
+            # # Фильтруем конкурентов (не наши лоты, активные)
+            # competitors = [
+            #     offer for offer in all_offers
+            #     if offer.get("userId") != my_user_id
+            #     and offer.get("active", False)
+            # ]
+            #
+            # return competitors
+
+        except Exception as e:
+            logger.error(f"Ошибка получения конкурентов: {e}")
+            return []
+
+    async def update_lot_price(self, lot_id: int, new_price: float) -> Dict[str, Any]:
+        """
+        Обновить цену лота
+
+        Args:
+            lot_id: ID лота
+            new_price: Новая цена в рублях
+
+        Returns:
+            dict: Результат операции с полем success
+        """
+        if not self.api:
+            raise RuntimeError("API не инициализирован")
+
+        try:
+            # TODO: Нужно реализовать метод update_offer_price в api/client.py
+            # Пока возвращаем заглушку
+            logger.warning("Метод update_lot_price требует реализации update_offer_price в API")
+            return {"success": False, "error": "Метод не реализован"}
+
+            # Когда метод будет реализован:
+            # result = await self.api.update_offer_price(lot_id, new_price)
+            # return result
+
+        except Exception as e:
+            logger.error(f"Ошибка обновления цены лота {lot_id}: {e}")
+            return {"success": False, "error": str(e)}
