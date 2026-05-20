@@ -263,6 +263,10 @@ class AutoUpdateService:
             
             # Проверяем что мы в git репозитории
             import subprocess
+            repo_dir = str(Path.cwd().resolve()).replace("\\", "/")
+
+            def git_cmd(*args: str) -> list[str]:
+                return ["git", "-c", f"safe.directory={repo_dir}", *args]
             
             # Проверяем наличие .git
             if not Path(".git").exists():
@@ -274,7 +278,7 @@ class AutoUpdateService:
             
             # Сохраняем текущую ветку
             result = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                git_cmd("rev-parse", "--abbrev-ref", "HEAD"),
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -291,7 +295,7 @@ class AutoUpdateService:
             
             # Проверяем наличие локальных изменений
             status_result = subprocess.run(
-                ["git", "status", "--porcelain"],
+                git_cmd("status", "--porcelain"),
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -305,7 +309,7 @@ class AutoUpdateService:
                 
                 # Сначала сбрасываем version.py к версии из HEAD (если он изменён)
                 subprocess.run(
-                    ["git", "checkout", "HEAD", "--", "version.py"],
+                    git_cmd("checkout", "HEAD", "--", "version.py"),
                     capture_output=True,
                     text=True,
                     timeout=5
@@ -313,7 +317,7 @@ class AutoUpdateService:
                 
                 # Теперь сохраняем остальные локальные изменения в stash
                 stash_result = subprocess.run(
-                    ["git", "stash", "push", "-m", "Auto-update: temporary stash"],
+                    git_cmd("stash", "push", "-m", "Auto-update: temporary stash"),
                     capture_output=True,
                     text=True,
                     timeout=10
@@ -400,7 +404,7 @@ class AutoUpdateService:
 
             # Получаем список файлов которые будут удалены
             result = subprocess.run(
-                ["git", "fetch", "origin", branch],
+                git_cmd("fetch", "origin", branch),
                 capture_output=True,
                 text=True,
                 timeout=30
@@ -415,7 +419,7 @@ class AutoUpdateService:
             
             # Проверяем какие файлы будут удалены
             result = subprocess.run(
-                ["git", "diff", "--name-status", f"HEAD..origin/{branch}"],
+                git_cmd("diff", "--name-status", f"HEAD..origin/{branch}"),
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -476,7 +480,7 @@ class AutoUpdateService:
             
             # Выполняем git merge (без удаления защищённых файлов)
             result = subprocess.run(
-                ["git", "merge", f"origin/{branch}", "--no-commit", "--no-ff"],
+                git_cmd("merge", f"origin/{branch}", "--no-commit", "--no-ff"),
                 capture_output=True,
                 text=True,
                 timeout=30
@@ -487,11 +491,11 @@ class AutoUpdateService:
             # Если есть конфликты или ошибки
             if result.returncode != 0 and "Already up to date" not in output:
                 # Отменяем merge
-                subprocess.run(["git", "merge", "--abort"], capture_output=True)
+                subprocess.run(git_cmd("merge", "--abort"), capture_output=True)
                 
                 # Восстанавливаем stash если создавали
                 if stash_created:
-                    subprocess.run(["git", "stash", "pop"], capture_output=True)
+                    subprocess.run(git_cmd("stash", "pop"), capture_output=True)
                     
                 return {
                     "success": False,
@@ -504,7 +508,7 @@ class AutoUpdateService:
                 for file_path in deleted_files:
                     # Восстанавливаем файл из HEAD
                     restore_result = subprocess.run(
-                        ["git", "checkout", "HEAD", "--", file_path],
+                        git_cmd("checkout", "HEAD", "--", file_path),
                         capture_output=True,
                         text=True,
                         timeout=5
@@ -515,7 +519,7 @@ class AutoUpdateService:
             # Завершаем merge
             if "Already up to date" not in output:
                 commit_result = subprocess.run(
-                    ["git", "commit", "--no-edit", "-m", "Auto-update: merge with protected files"],
+                    git_cmd("commit", "--no-edit", "-m", "Auto-update: merge with protected files"),
                     capture_output=True,
                     text=True,
                     timeout=10
@@ -530,7 +534,7 @@ class AutoUpdateService:
             if stash_created:
                 logger.info("♻️ Восстанавливаю локальные изменения...")
                 stash_pop_result = subprocess.run(
-                    ["git", "stash", "pop"],
+                    git_cmd("stash", "pop"),
                     capture_output=True,
                     text=True,
                     timeout=10
@@ -547,7 +551,7 @@ class AutoUpdateService:
                 if stash_created:
                     logger.info("♻️ Восстанавливаю локальные изменения...")
                     stash_pop_result = subprocess.run(
-                        ["git", "stash", "pop"],
+                        git_cmd("stash", "pop"),
                         capture_output=True,
                         text=True,
                         timeout=10

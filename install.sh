@@ -74,6 +74,12 @@ ensure_user() {
     fi
 }
 
+configure_safe_directory() {
+    log "Настраиваю git safe.directory ..."
+    runuser -u "$APP_USER" -- git config --global --add safe.directory "$INSTALL_DIR" || true
+    git config --global --add safe.directory "$INSTALL_DIR" || true
+}
+
 sync_project() {
     log "Копирую проект в $INSTALL_DIR ..."
     mkdir -p "$INSTALL_DIR"
@@ -223,6 +229,7 @@ main() {
     reset_runtime_state_if_needed
     setup_python
     fix_permissions
+    configure_safe_directory
     write_env_file
     run_first_setup
     write_service
