@@ -1,23 +1,33 @@
-# ✨ Starvell Cardinal ✨
+<div align="center">
 
-> 🚀 Telegram-бот для автоматизации `Starvell.com`
+# ✨ Starvell Cardinal
 
-> 🔥 Чистый Cardinal • ⚙️ Автонастройка • 🔄 Автообновления • 🧩 Плагины
+<p>
+  <a href="https://t.me/StarvellCardinal">📢 Channel</a> •
+  <a href="https://t.me/StarvellPlugins">🧩 Plugins</a> •
+  <a href="https://t.me/embedium">👤 Author</a> •
+  <a href="https://github.com/etheriumflipper/StarvellCardinal">💻 GitHub</a>
+</p>
 
-## 🌐 Links
+<p>
+  <img src="https://img.shields.io/badge/Starvell-Automation-1f6feb?style=for-the-badge" alt="Starvell Automation" />
+  <img src="https://img.shields.io/badge/Telegram-Bot-2ea44f?style=for-the-badge" alt="Telegram Bot" />
+  <img src="https://img.shields.io/badge/Linux-Systemd-f2cc60?style=for-the-badge" alt="Linux Systemd" />
+</p>
 
-- 👤 Author: [@embedium](https://t.me/embedium)
-- 📢 Channel: [@StarvellCardinal](https://t.me/StarvellCardinal)
-- 🧩 Plugins: [@StarvellPlugins](https://t.me/StarvellPlugins)
-- 💻 GitHub: [etheriumflipper/StarvellCardinal](https://github.com/etheriumflipper/StarvellCardinal)
+<h3>🚀 Telegram-бот для автоматизации работы со Starvell.com</h3>
+
+<p>⚙️ Чистый Cardinal • 🔄 Автообновления • 🧩 Плагинная система • 🛠️ Быстрая установка</p>
+
+</div>
+
+> Starvell Cardinal помогает держать магазин под контролем: отслеживать заказы, управлять лотами, настраивать автодействия и получать уведомления в Telegram.
 
 ## ⚡ One Command Install
 
 ```bash
 wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/install.sh -O install.sh && bash install.sh
 ```
-
-Starvell Cardinal помогает держать магазин под контролем: отслеживать заказы, управлять лотами, настраивать автодействия и получать уведомления в Telegram.
 
 ## 🚀 Быстрый старт
 
