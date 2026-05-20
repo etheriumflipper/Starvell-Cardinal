@@ -173,8 +173,13 @@ Type=simple
 User=$APP_USER
 Group=$APP_GROUP
 WorkingDirectory=$INSTALL_DIR
+PermissionsStartOnly=true
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-$ENV_FILE
+ExecStartPre=+/usr/bin/mkdir -p $INSTALL_DIR/configs $INSTALL_DIR/logs $INSTALL_DIR/storage $INSTALL_DIR/storage/cache $INSTALL_DIR/storage/plugins $INSTALL_DIR/storage/products $INSTALL_DIR/storage/settings $INSTALL_DIR/storage/stats
+ExecStartPre=+/usr/bin/chown -R $APP_USER:$APP_GROUP $INSTALL_DIR/configs $INSTALL_DIR/logs $INSTALL_DIR/storage
+ExecStartPre=+/usr/bin/find $INSTALL_DIR/configs $INSTALL_DIR/logs $INSTALL_DIR/storage -type d -exec /usr/bin/chmod 775 {} \;
+ExecStartPre=+/usr/bin/find $INSTALL_DIR/configs $INSTALL_DIR/logs $INSTALL_DIR/storage -type f -exec /usr/bin/chmod 664 {} \;
 ExecStart=$INSTALL_DIR/venv/bin/python $INSTALL_DIR/main.py
 Restart=always
 RestartSec=5
@@ -195,6 +200,26 @@ enable_service() {
 
 fix_permissions() {
     chown -R "$APP_USER:$APP_GROUP" "$INSTALL_DIR"
+}
+
+fix_runtime_permissions() {
+    mkdir -p \
+        "$INSTALL_DIR/configs" \
+        "$INSTALL_DIR/logs" \
+        "$INSTALL_DIR/storage" \
+        "$INSTALL_DIR/storage/cache" \
+        "$INSTALL_DIR/storage/plugins" \
+        "$INSTALL_DIR/storage/products" \
+        "$INSTALL_DIR/storage/settings" \
+        "$INSTALL_DIR/storage/stats"
+
+    chown -R "$APP_USER:$APP_GROUP" \
+        "$INSTALL_DIR/configs" \
+        "$INSTALL_DIR/logs" \
+        "$INSTALL_DIR/storage"
+
+    find "$INSTALL_DIR/configs" "$INSTALL_DIR/logs" "$INSTALL_DIR/storage" -type d -exec chmod 775 {} \;
+    find "$INSTALL_DIR/configs" "$INSTALL_DIR/logs" "$INSTALL_DIR/storage" -type f -exec chmod 664 {} \; 2>/dev/null || true
 }
 
 print_summary() {
@@ -232,6 +257,7 @@ main() {
     configure_safe_directory
     write_env_file
     run_first_setup
+    fix_runtime_permissions
     write_service
     enable_service
     print_summary
