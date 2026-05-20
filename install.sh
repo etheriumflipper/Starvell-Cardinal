@@ -8,7 +8,9 @@ APP_GROUP="starvell"
 INSTALL_DIR="/opt/starvell-cardinal"
 ENV_FILE="/etc/starvell-cardinal.env"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+REPOSITORY_URL="https://github.com/etheriumflipper/StarvellCardinal.git"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORK_SOURCE_DIR="$SOURCE_DIR"
 SELF_ARGS=("$@")
 
 log() {
@@ -34,6 +36,19 @@ require_root() {
     if [[ "${EUID}" -ne 0 ]]; then
         exec sudo bash "$0" "${SELF_ARGS[@]}"
     fi
+}
+
+prepare_source_dir() {
+    if [[ -f "$SOURCE_DIR/main.py" && -f "$SOURCE_DIR/requirements.txt" ]]; then
+        WORK_SOURCE_DIR="$SOURCE_DIR"
+        return
+    fi
+
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    log "Локальный код проекта не найден, клонирую $REPOSITORY_URL ..."
+    git clone --branch main --single-branch "$REPOSITORY_URL" "$temp_dir/repo"
+    WORK_SOURCE_DIR="$temp_dir/repo"
 }
 
 install_packages() {
@@ -63,9 +78,8 @@ sync_project() {
     log "Копирую проект в $INSTALL_DIR ..."
     mkdir -p "$INSTALL_DIR"
 
-    if [[ "$SOURCE_DIR" != "$INSTALL_DIR" ]]; then
+    if [[ "$WORK_SOURCE_DIR" != "$INSTALL_DIR" ]]; then
         rsync -a --delete \
-            --exclude '.git/' \
             --exclude 'venv/' \
             --exclude '__pycache__/' \
             --exclude '*.pyc' \
@@ -75,7 +89,7 @@ sync_project() {
             --exclude 'storage/*.json' \
             --exclude 'storage/*/*.json' \
             --exclude 'storage/*/*/*.json' \
-            "$SOURCE_DIR/" "$INSTALL_DIR/"
+            "$WORK_SOURCE_DIR/" "$INSTALL_DIR/"
     else
         warn "install.sh запущен из каталога установки, копирование файлов пропущено."
     fi
@@ -107,7 +121,7 @@ write_env_file() {
 # Optional update source for Starvell Cardinal.
 # Example:
 # STARVELL_VERSION_URL=https://example.com/version.py
-STARVELL_VERSION_URL=
+STARVELL_VERSION_URL=https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/version.py
 EOF
     fi
 
@@ -192,6 +206,7 @@ main() {
     require_linux
     require_root
     install_packages
+    prepare_source_dir
     ensure_user
     sync_project
     setup_python

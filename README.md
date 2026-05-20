@@ -98,7 +98,7 @@ colorama>=0.4.6         # Цветной вывод в консоль
 Можно установить одной командой:
 
 ```bash
-git clone <REPOSITORY_URL> && cd Starvell-cardinal && sudo bash install.sh
+wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/install.sh -O install.sh && bash install.sh
 ```
 
 ### Первый запуск

@@ -643,6 +643,9 @@ class NotificationManager:
             f"╚══════════════════════╝\n\n"
             f"📌 <b>Текущая версия:</b> <code>{current_version}</code>\n"
             f"✨ <b>Новая версия:</b> <code>{latest_version}</code>\n\n"
+            f"⬇️ При запуске обнаружена новая версия Starvell Cardinal.\n"
+            f"Нажмите кнопку ниже, чтобы скачать и установить обновление.\n\n"
+            f"Или используйте команду <code>/update</code>."
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
