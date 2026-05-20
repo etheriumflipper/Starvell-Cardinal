@@ -15,13 +15,24 @@
   <img src="https://img.shields.io/badge/Linux-Systemd-f2cc60?style=for-the-badge" alt="Linux Systemd" />
 </p>
 
-<h3>🚀 Telegram-бот для автоматизации работы со Starvell.com</h3>
+<h3>Starvell Cardinal is a Telegram bot for Starvell automation</h3>
 
-<p>⚙️ Чистый Cardinal • 🔄 Автообновления • 🧩 Плагинная система • 🛠️ Быстрая установка</p>
+<p>⚙️ Clean Cardinal • 🔄 Auto Updates • 🧩 Plugin System • 🛠️ One-Command Install</p>
 
 </div>
 
-> Starvell Cardinal помогает держать магазин под контролем: отслеживать заказы, управлять лотами, настраивать автодействия и получать уведомления в Telegram.
+> Starvell Cardinal is a Telegram bot for Starvell automation. Starvell Cardinal helps manage orders, lots, notifications, plugins and updates from one control panel.
+
+Starvell Cardinal is built for sellers who want a clean Telegram workflow around Starvell. The project focuses on fast setup, automated order handling, plugin support, GitHub-based updates and Linux hosting with `systemd`.
+
+If you are searching for `Starvell Cardinal`, this is the main public GitHub repository with the current install script, source code, releases and update mechanism.
+
+Quick links:
+
+- GitHub: https://github.com/etheriumflipper/StarvellCardinal
+- Telegram channel: https://t.me/StarvellCardinal
+- Telegram plugins: https://t.me/StarvellPlugins
+- Author: https://t.me/embedium
 
 ## ⚡ One Command Install
 
@@ -29,17 +40,17 @@
 wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/install.sh -O install.sh && bash install.sh
 ```
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
 ### 🐧 Linux / VPS
 
-Установка одной командой:
+Install with one command:
 
 ```bash
 wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/install.sh -O install.sh && bash install.sh
 ```
 
-После установки управление сервисом:
+Service management after install:
 
 ```bash
 sudo systemctl status starvell-cardinal
@@ -57,33 +68,33 @@ Setup.bat
 Start.bat
 ```
 
-## 🧠 Что умеет бот
+## 🧠 What Starvell Cardinal Can Do
 
-- ⚙️ Автоматизация работы со `Starvell.com`
-- 📦 Управление лотами и товарами
-- 📨 Отслеживание заказов и сообщений
-- 🔔 Telegram-уведомления по событиям
-- 🛠️ Первичная настройка через мастер
-- 🔄 Автообновление с уведомлением о новой версии
-- 🧩 Поддержка собственной системы плагинов
+- ⚙️ Automate work with `Starvell.com`
+- 📦 Manage lots and products
+- 📨 Track orders and messages
+- 🔔 Send Telegram notifications
+- 🛠️ Run first setup through a guided wizard
+- 🔄 Check for updates and notify about new versions
+- 🧩 Support a separate plugin system
 
-## 🔄 Автообновление
+## 🔄 Auto Updates
 
-Starvell Cardinal умеет проверять обновления при запуске и в фоне.
+Starvell Cardinal can check for updates on startup and in the background.
 
-Если в репозитории выходит новая версия:
+When a new version appears in the repository:
 
-- 👀 бот видит новую `VERSION`
-- 📩 админам приходит уведомление в Telegram
-- 🏷️ в сообщении показывается текущая и новая версия
-- 🔘 доступна кнопка `Обновить сейчас`
-- ⌨️ также можно использовать команду `/update`
+- 👀 the bot detects the new `VERSION`
+- 📨 admins receive a Telegram notification
+- 🏷️ the message shows the current and new version
+- 🔘 the bot offers an `Update now` button
+- ⌨️ you can also use the `/update` command
 
-⚠️ Важно: чтобы обновление обнаружилось, при публикации новой версии нужно менять значение `VERSION` в [version.py](version.py).
+Important: to trigger update detection, increase `VERSION` in [version.py](version.py) before publishing a new release.
 
-## 📥 Установка из репозитория
+## 📥 Install From Repository
 
-Если хотите ставить вручную:
+If you want a manual install:
 
 ```bash
 git clone https://github.com/etheriumflipper/StarvellCardinal.git
@@ -91,25 +102,25 @@ cd StarvellCardinal
 sudo bash install.sh
 ```
 
-Установщик:
+The installer:
 
-- 📦 ставит зависимости
-- 🐍 создает виртуальное окружение
-- 🧭 запускает `first_setup.py`
-- 🔌 создает `systemd`-сервис
-- 🟢 поднимает бота в автономном режиме
+- 📦 installs dependencies
+- 🐍 creates a virtual environment
+- 🧭 runs `first_setup.py`
+- 🔌 creates a `systemd` service
+- 🟢 launches the bot in autonomous mode
 
-## 🧷 Первый запуск
+## 🧷 First Launch
 
-Во время настройки бот попросит:
+During setup the bot asks for:
 
-1. 🤖 `Bot Token` от `@BotFather`
-2. 🔐 пароль для входа в панель бота
-3. 🍪 `session_cookie` от `Starvell.com`
+1. `Bot Token` from `@BotFather`
+2. password for bot access
+3. `session_cookie` from `Starvell.com`
 
-После завершения мастер создает `configs/_main.cfg`, а сервис запускается автоматически.
+After the setup wizard finishes, it creates `configs/_main.cfg` and starts the service automatically.
 
-## 🗂️ Структура проекта
+## 🗂️ Project Structure
 
 ```text
 StarvellCardinal/
@@ -126,23 +137,23 @@ StarvellCardinal/
 └── storage/
 ```
 
-`plugins/` в публичной версии оставлен пустым, чтобы вы могли разворачивать свой чистый Cardinal и добавлять нужные плагины отдельно.
+`plugins/` stays empty in the public version so you can deploy a clean Cardinal and add your own plugins separately.
 
-## 🛠️ Разработка и кастомизация
+## 🛠️ Development
 
-- 🧠 Основная логика бота: `bot/`
-- 🌐 Работа с API: `api/`
-- 🧩 Система плагинов: `bot/plugins/` и `plugins/`
-- 📘 Документация по плагинам: [docs/PLUGINS_API.md](docs/PLUGINS_API.md)
+- 🧠 Bot logic: `bot/`
+- 🌐 API integration: `api/`
+- 🧩 Plugin system: `bot/plugins/` and `plugins/`
+- 📘 Plugin API docs: [docs/PLUGINS_API.md](docs/PLUGINS_API.md)
 
-## 🔗 Ссылки
+## 🔗 Links
 
-- 👤 Автор: [@embedium](https://t.me/embedium)
-- 📢 Telegram-канал: [@StarvellCardinal](https://t.me/StarvellCardinal)
-- 🧩 Плагины: [@StarvellPlugins](https://t.me/StarvellPlugins)
+- 👤 Author: [@embedium](https://t.me/embedium)
+- 📢 Telegram channel: [@StarvellCardinal](https://t.me/StarvellCardinal)
+- 🧩 Plugins: [@StarvellPlugins](https://t.me/StarvellPlugins)
 - 💻 GitHub: [etheriumflipper/StarvellCardinal](https://github.com/etheriumflipper/StarvellCardinal)
-- 🌍 Платформа: [Starvell.com](https://starvell.com)
+- 🌍 Platform: [Starvell.com](https://starvell.com)
 
-## 📄 Лицензия
+## 📄 License
 
-Проект распространяется по лицензии [MIT](LICENSE).
+The project is distributed under the [MIT](LICENSE) license.
