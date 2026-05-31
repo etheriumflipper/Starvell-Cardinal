@@ -109,6 +109,14 @@ class CBT:
     PLUGIN_COMMANDS = "plugin_commands"
     PLUGIN_SETTINGS = "plugin_settings"
 
+    # Прокси (доступ к Telegram)
+    PROXY_MENU = "proxy"
+    SWITCH_PROXY = "switch:proxy"
+    PROXY_SET_TYPE = "proxy:type"
+    PROXY_SET_ADDR = "proxy:addr"
+    PROXY_SET_AUTH = "proxy:auth"
+    PROXY_CLEAR_AUTH = "proxy:clear_auth"
+
 
 def bool_to_emoji(value: bool) -> str:
     """Преобразовать bool в эмодзи"""
@@ -229,6 +237,12 @@ def get_main_menu_page_2(update_available: bool = False) -> InlineKeyboardMarkup
             InlineKeyboardButton(
                 text="👥 Авторизованные пользователи",
                 callback_data=CBT.AUTHORIZED_USERS
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="🌐 Прокси (Telegram)",
+                callback_data=CBT.PROXY_MENU
             ),
         ],
         [
@@ -1057,6 +1071,52 @@ def get_auto_ticket_settings_menu(
             )
         ]
     ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_proxy_menu(enabled: bool, ptype: str, ip: str, port: str,
+                   has_auth: bool) -> InlineKeyboardMarkup:
+    """Меню настроек прокси для Telegram"""
+    addr = f"{ip}:{port}" if (ip and port) else "не задан"
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if enabled else '❌'} Статус: {'Включён' if enabled else 'Выключен'}",
+                callback_data=CBT.SWITCH_PROXY
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"🔧 Тип: {ptype}",
+                callback_data=CBT.PROXY_SET_TYPE
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"🌐 Адрес: {addr}",
+                callback_data=CBT.PROXY_SET_ADDR
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"🔑 Авторизация: {'задана' if has_auth else 'нет'}",
+                callback_data=CBT.PROXY_SET_AUTH
+            )
+        ],
+    ]
+    if has_auth:
+        keyboard.append([
+            InlineKeyboardButton(
+                text="🧹 Очистить логин/пароль",
+                callback_data=CBT.PROXY_CLEAR_AUTH
+            )
+        ])
+    keyboard.append([
+        InlineKeyboardButton(
+            text="🔙 Назад",
+            callback_data=CBT.MAIN_PAGE_2
+        )
+    ])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 

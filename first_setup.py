@@ -311,7 +311,87 @@ def run_setup():
         'autoTicketMaxOrders': '5',
         'autoTicketOrderAge': '48'
     }
-    
+
+    # ═══════════════════════════════════════════════════════════
+    # ШАГ 4: Прокси для Telegram (опционально)
+    # ═══════════════════════════════════════════════════════════
+    print_header(step=4)
+
+    print_box(
+        "🌐 ШАГ 4: Прокси для Telegram (необязательно)",
+        [
+            "Если Telegram заблокирован у вашего провайдера (напр. в РФ),",
+            "укажите прокси — бот будет ходить в Telegram через него.",
+            "",
+            "Поддерживаются: SOCKS5, SOCKS4, HTTP(S).",
+            "Рекомендуется SOCKS5.",
+            "",
+            "Можно пропустить (Enter) и включить позже через бота.",
+        ]
+    )
+
+    proxy_cfg = {
+        'enabled': 'false',
+        'type': 'socks5',
+        'ip': '',
+        'port': '',
+        'login': '',
+        'password': '',
+        'check': 'false',
+    }
+
+    use_proxy = ask_yes_no("Использовать прокси для Telegram?", default=False)
+
+    if use_proxy:
+        print()
+        print_info("Тип прокси: 1) socks5  2) socks4  3) http  4) https")
+        ptype_map = {'1': 'socks5', '2': 'socks4', '3': 'http', '4': 'https',
+                     'socks5': 'socks5', 'socks4': 'socks4',
+                     'http': 'http', 'https': 'https'}
+        while True:
+            ptype_in = ask("Введите тип прокси", "socks5").strip().lower()
+            ptype = ptype_map.get(ptype_in)
+            if ptype:
+                break
+            print_error("Неверный тип! Введите 1-4 или socks5/socks4/http/https\n")
+
+        while True:
+            proxy_ip = ask("IP или хост прокси (напр. 127.0.0.1)").strip()
+            if proxy_ip:
+                break
+            print_error("Адрес не может быть пустым!\n")
+
+        while True:
+            proxy_port = ask("Порт прокси (напр. 1080)").strip()
+            if proxy_port.isdigit() and 0 < int(proxy_port) < 65536:
+                break
+            print_error("Порт должен быть числом 1-65535!\n")
+
+        print()
+        print_info("Авторизация прокси (если нужна). Enter — пропустить.")
+        proxy_login = ask("Логин (или Enter)", "").strip()
+        proxy_password = ""
+        if proxy_login:
+            proxy_password = ask("Пароль", "").strip()
+
+        proxy_cfg = {
+            'enabled': 'true',
+            'type': ptype,
+            'ip': proxy_ip,
+            'port': proxy_port,
+            'login': proxy_login,
+            'password': proxy_password,
+            'check': 'false',
+        }
+
+        animate_dots("Сохранение прокси")
+        _auth = f"{proxy_login}:***@" if proxy_login else ""
+        print_success(f"Прокси сохранён: {ptype}://{_auth}{proxy_ip}:{proxy_port}\n")
+    else:
+        print_info("Прокси не используется — подключение к Telegram напрямую.\n")
+
+    config['Proxy'] = proxy_cfg
+
     
     # ═══════════════════════════════════════════════════════════
     # Сохранение

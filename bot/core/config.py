@@ -114,6 +114,15 @@ class ConfigManager:
                 'ticketType': '1',
                 'orderUserTypeId': '2',
                 'orderTopicId': '501'
+            },
+            'Proxy': {
+                'enabled': 'false',
+                'type': 'socks5',
+                'ip': '',
+                'port': '',
+                'login': '',
+                'password': '',
+                'check': 'false'
             }
         }
 
@@ -281,47 +290,80 @@ class BotConfig:
         default_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         return _config_manager.get('Starvell', 'user_agent', default_ua)
     
-    # === Прокси ===
+    # === Прокси (для доступа к Telegram, напр. из РФ) ===
     @staticmethod
     def PROXY_ENABLED() -> bool:
-        # Proxy support removed — всегда отключено
-        return False
-    
+        return _config_manager.get('Proxy', 'enabled', False)
+
+    @staticmethod
+    def PROXY_TYPE() -> str:
+        """Тип прокси: socks5 | socks4 | http | https"""
+        t = str(_config_manager.get('Proxy', 'type', 'socks5') or 'socks5').strip().lower()
+        if t not in ('socks5', 'socks4', 'http', 'https'):
+            t = 'socks5'
+        return t
+
     @staticmethod
     def PROXY_IP() -> str:
-        return ''
-    
+        return str(_config_manager.get('Proxy', 'ip', '') or '').strip()
+
     @staticmethod
     def PROXY_PORT() -> str:
-        return ''
-    
+        return str(_config_manager.get('Proxy', 'port', '') or '').strip()
+
     @staticmethod
     def PROXY_LOGIN() -> str:
-        return ''
-    
+        return str(_config_manager.get('Proxy', 'login', '') or '').strip()
+
     @staticmethod
     def PROXY_PASSWORD() -> str:
-        return ''
-    
+        return str(_config_manager.get('Proxy', 'password', '') or '').strip()
+
     @staticmethod
     def PROXY_CHECK() -> bool:
         """Проверять ли прокси перед использованием"""
-        return False
-    
+        return _config_manager.get('Proxy', 'check', False)
+
+    @staticmethod
+    def PROXY_URL() -> str:
+        """
+        Собрать прокси-URL для aiogram/aiohttp_socks.
+        Формат: scheme://[login:password@]ip:port
+        Пустая строка — прокси выключен или не задан.
+        """
+        if not BotConfig.PROXY_ENABLED():
+            return ''
+        ip = BotConfig.PROXY_IP()
+        port = BotConfig.PROXY_PORT()
+        if not ip or not port:
+            return ''
+        scheme = BotConfig.PROXY_TYPE()
+        login = BotConfig.PROXY_LOGIN()
+        password = BotConfig.PROXY_PASSWORD()
+        auth = ''
+        if login:
+            auth = f"{login}:{password}@" if password else f"{login}@"
+        return f"{scheme}://{auth}{ip}:{port}"
+
     @staticmethod
     def PROXY() -> str:
-        """
-        Получить прокси строку (если включен)
-        Формат: [login:password@]ip:port
-        """
-        # Proxy support removed — возвращаем пустую строку
-        return ''
-    
+        """Обратная совместимость: [login:password@]ip:port (без схемы)."""
+        url = BotConfig.PROXY_URL()
+        if not url:
+            return ''
+        return url.split('://', 1)[1] if '://' in url else url
+
     @staticmethod
-    def set_proxy(ip: str, port: str, login: str = '', password: str = '', enabled: bool = True, check: bool = False):
-        """Установить прокси"""
-        # Proxy support was removed; this function is a no-op to preserve compatibility
-        return
+    def set_proxy(ip: str, port: str, login: str = '', password: str = '',
+                  enabled: bool = True, check: bool = False, ptype: str = 'socks5'):
+        """Установить прокси и сохранить в конфиг."""
+        _config_manager.set('Proxy', 'ip', str(ip or '').strip())
+        _config_manager.set('Proxy', 'port', str(port or '').strip())
+        _config_manager.set('Proxy', 'login', str(login or '').strip())
+        _config_manager.set('Proxy', 'password', str(password or '').strip())
+        _config_manager.set('Proxy', 'type', str(ptype or 'socks5').strip().lower())
+        _config_manager.set('Proxy', 'check', bool(check))
+        _config_manager.set('Proxy', 'enabled', bool(enabled))
     
     # === Хранилище ===
     @staticmethod

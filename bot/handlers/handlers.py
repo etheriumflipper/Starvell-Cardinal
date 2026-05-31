@@ -18,6 +18,7 @@ from bot.keyboards import (
     get_notifications_menu,
     get_auto_delivery_lots_menu,
     get_auto_ticket_settings_menu,
+    get_proxy_menu,
     get_blacklist_menu,
     get_plugins_menu,
     get_select_template_menu,
@@ -82,6 +83,12 @@ class ReplyState(StatesGroup):
 class SessionState(StatesGroup):
     """Состояния для обновления session_cookie"""
     waiting_for_cookie = State()
+
+
+class ProxyState(StatesGroup):
+    """Состояния для настройки прокси Telegram"""
+    waiting_for_addr = State()
+    waiting_for_auth = State()
 
 
 class AutoTicketState(StatesGroup):
@@ -1269,6 +1276,176 @@ async def process_auto_ticket_max_orders(message: Message, state: FSMContext):
             "❌ Неверный формат. Введите число от 1 до 50\n"
             "Отправьте /cancel для отмены"
         )
+
+
+def _proxy_menu_text() -> str:
+    """Текст меню прокси с текущим состоянием."""
+    enabled = BotConfig.PROXY_ENABLED()
+    ptype = BotConfig.PROXY_TYPE()
+    ip = BotConfig.PROXY_IP()
+    port = BotConfig.PROXY_PORT()
+    has_auth = bool(BotConfig.PROXY_LOGIN())
+    addr = f"{ip}:{port}" if (ip and port) else "не задан"
+    return (
+        "🌐 <b>Прокси для Telegram</b>\n\n"
+        "Позволяет боту подключаться к Telegram через прокси — полезно, если "
+        "Telegram заблокирован у провайдера (напр. в РФ). Поддерживаются "
+        "SOCKS5, SOCKS4, HTTP(S).\n\n"
+        f"Статус: <b>{'Включён ✅' if enabled else 'Выключен ❌'}</b>\n"
+        f"Тип: <b>{ptype}</b>\n"
+        f"Адрес: <b>{addr}</b>\n"
+        f"Авторизация: <b>{'задана' if has_auth else 'нет'}</b>\n\n"
+        "⚠️ После изменения перезапустите бота (/restart), чтобы прокси "
+        "применился к подключению."
+    )
+
+
+def _proxy_menu_kb():
+    return get_proxy_menu(
+        BotConfig.PROXY_ENABLED(),
+        BotConfig.PROXY_TYPE(),
+        BotConfig.PROXY_IP(),
+        BotConfig.PROXY_PORT(),
+        bool(BotConfig.PROXY_LOGIN()),
+    )
+
+
+@router.callback_query(F.data == CBT.PROXY_MENU)
+async def callback_proxy_menu(callback: CallbackQuery):
+    """Меню настроек прокси."""
+    await callback.message.edit_text(_proxy_menu_text(), reply_markup=_proxy_menu_kb())
+    await callback.answer()
+
+
+@router.callback_query(F.data == CBT.SWITCH_PROXY)
+async def callback_switch_proxy(callback: CallbackQuery):
+    """Включить/выключить прокси."""
+    current = BotConfig.PROXY_ENABLED()
+    if not current and (not BotConfig.PROXY_IP() or not BotConfig.PROXY_PORT()):
+        await callback.answer("Сначала задайте адрес прокси (IP:порт)", show_alert=True)
+        return
+    get_config_manager().set('Proxy', 'enabled', not current)
+    await callback.answer(
+        f"Прокси {'включён' if not current else 'выключен'}. Перезапустите бота (/restart).",
+        show_alert=False,
+    )
+    await callback.message.edit_text(_proxy_menu_text(), reply_markup=_proxy_menu_kb())
+
+
+@router.callback_query(F.data == CBT.PROXY_SET_TYPE)
+async def callback_proxy_set_type(callback: CallbackQuery):
+    """Циклически переключить тип прокси."""
+    order = ['socks5', 'socks4', 'http', 'https']
+    cur = BotConfig.PROXY_TYPE()
+    try:
+        nxt = order[(order.index(cur) + 1) % len(order)]
+    except ValueError:
+        nxt = 'socks5'
+    get_config_manager().set('Proxy', 'type', nxt)
+    await callback.answer(f"Тип прокси: {nxt}", show_alert=False)
+    await callback.message.edit_text(_proxy_menu_text(), reply_markup=_proxy_menu_kb())
+
+
+@router.callback_query(F.data == CBT.PROXY_SET_ADDR)
+async def callback_proxy_set_addr(callback: CallbackQuery, state: FSMContext):
+    """Запросить адрес прокси."""
+    await state.set_state(ProxyState.waiting_for_addr)
+    await callback.message.answer(
+        "🌐 Введите адрес прокси в формате <code>IP:порт</code>\n\n"
+        "Например: <code>127.0.0.1:1080</code>\n"
+        "Можно сразу с логином/паролем: <code>IP:порт:логин:пароль</code>\n\n"
+        "Отправьте /cancel для отмены"
+    )
+    await callback.answer()
+
+
+@router.message(ProxyState.waiting_for_addr)
+async def process_proxy_addr(message: Message, state: FSMContext):
+    """Обработать ввод адреса прокси."""
+    if message.text and message.text.strip() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Отменено")
+        return
+
+    raw = (message.text or "").strip()
+    parts = raw.split(":")
+    if len(parts) < 2:
+        await message.answer(
+            "❌ Неверный формат. Нужно минимум <code>IP:порт</code>\n"
+            "Отправьте /cancel для отмены"
+        )
+        return
+
+    ip = parts[0].strip()
+    port = parts[1].strip()
+    if not ip or not port.isdigit() or not (0 < int(port) < 65536):
+        await message.answer(
+            "❌ Порт должен быть числом 1-65535, адрес — не пустым.\n"
+            "Отправьте /cancel для отмены"
+        )
+        return
+
+    cm = get_config_manager()
+    cm.set('Proxy', 'ip', ip)
+    cm.set('Proxy', 'port', port)
+
+    auth_msg = ""
+    if len(parts) >= 4:
+        cm.set('Proxy', 'login', parts[2].strip())
+        cm.set('Proxy', 'password', parts[3].strip())
+        auth_msg = " + логин/пароль"
+
+    await state.clear()
+    await message.answer(
+        f"✅ Адрес прокси сохранён: <code>{ip}:{port}</code>{auth_msg}\n\n"
+        "Включите прокси в меню и перезапустите бота (/restart)."
+    )
+
+
+@router.callback_query(F.data == CBT.PROXY_SET_AUTH)
+async def callback_proxy_set_auth(callback: CallbackQuery, state: FSMContext):
+    """Запросить логин/пароль прокси."""
+    await state.set_state(ProxyState.waiting_for_auth)
+    await callback.message.answer(
+        "🔑 Введите логин и пароль прокси в формате <code>логин:пароль</code>\n\n"
+        "Если пароля нет — просто <code>логин</code>\n"
+        "Отправьте /cancel для отмены"
+    )
+    await callback.answer()
+
+
+@router.message(ProxyState.waiting_for_auth)
+async def process_proxy_auth(message: Message, state: FSMContext):
+    """Обработать ввод логина/пароля прокси."""
+    if message.text and message.text.strip() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Отменено")
+        return
+
+    raw = (message.text or "").strip()
+    if not raw:
+        await message.answer("❌ Пусто. Отправьте логин:пароль или /cancel")
+        return
+
+    login, _, password = raw.partition(":")
+    cm = get_config_manager()
+    cm.set('Proxy', 'login', login.strip())
+    cm.set('Proxy', 'password', password.strip())
+    await state.clear()
+    await message.answer(
+        "✅ Авторизация прокси сохранена.\n"
+        "Перезапустите бота (/restart), чтобы применить."
+    )
+
+
+@router.callback_query(F.data == CBT.PROXY_CLEAR_AUTH)
+async def callback_proxy_clear_auth(callback: CallbackQuery):
+    """Очистить логин/пароль прокси."""
+    cm = get_config_manager()
+    cm.set('Proxy', 'login', '')
+    cm.set('Proxy', 'password', '')
+    await callback.answer("Логин/пароль очищены", show_alert=False)
+    await callback.message.edit_text(_proxy_menu_text(), reply_markup=_proxy_menu_kb())
 
 
 @router.callback_query(F.data == CBT.SWITCH_AUTO_INSTALL)
