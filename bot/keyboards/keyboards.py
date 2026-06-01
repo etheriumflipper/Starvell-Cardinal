@@ -259,7 +259,7 @@ def get_main_menu_page_2(update_available: bool = False) -> InlineKeyboardMarkup
         [
             InlineKeyboardButton(
                 text="🔗 Сообщить об проблеме",
-                url=os.environ.get('TELEGRAM_SUPPORT_URL', 'https://t.me/starvellbugreport_bot')
+                url=os.environ.get('TELEGRAM_SUPPORT_URL', 'https://t.me/embedium')
             ),
         ],
         [
