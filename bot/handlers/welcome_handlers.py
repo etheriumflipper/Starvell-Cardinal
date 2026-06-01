@@ -105,13 +105,13 @@ async def callback_toggle_welcome(callback: CallbackQuery, **kwargs):
 @router.callback_query(F.data == CBT.SET_WELCOME_TEXT)
 async def callback_set_welcome_text(callback: CallbackQuery, state: FSMContext, **kwargs):
     """Запросить новый текст приветствия."""
+    await callback.answer()
     await state.set_state(WelcomeState.waiting_for_text)
     await callback.message.answer(
         "✏️ Отправьте новый текст приветственного сообщения одним сообщением.\n\n"
         "Поддерживается HTML-разметка (<b>, <i>, <code> и т.д.).\n"
         "Отправьте /cancel для отмены."
     )
-    await callback.answer()
 
 
 @router.message(WelcomeState.waiting_for_text)
@@ -124,7 +124,8 @@ async def process_welcome_text(message: Message, state: FSMContext, **kwargs):
 
     new_text = (message.text or "").strip()
     if not new_text:
-        await message.answer("❌ Текст пустой. Пришлите текст или /cancel.")
+        await state.clear()
+        await message.answer("❌ Текст пустой. Пришлите текст через команду /welcome или откройте меню заново.")
         return
     if len(new_text) > 2000:
         await message.answer("❌ Слишком длинный текст (макс. 2000 символов). Сократите.")
