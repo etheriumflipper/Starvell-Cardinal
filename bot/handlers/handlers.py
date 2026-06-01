@@ -25,7 +25,7 @@ from bot.keyboards import (
     get_custom_commands_menu,
     CBT,
 )
-from bot.handlers import auto_delivery_handlers, blacklist_handlers, plugins_handlers, templates_handlers, extra_handlers, custom_commands_handlers
+from bot.handlers import auto_delivery_handlers, blacklist_handlers, plugins_handlers, templates_handlers, extra_handlers, custom_commands_handlers, welcome_handlers
 
 
 router = Router()
@@ -35,6 +35,7 @@ router.include_router(plugins_handlers.router)
 router.include_router(templates_handlers.router)
 router.include_router(extra_handlers.router)
 router.include_router(custom_commands_handlers.router)
+router.include_router(welcome_handlers.router)
 
 
 # Утилита: безопасное приведение к float (чтобы избежать ошибок форматирования, если приходит dict)

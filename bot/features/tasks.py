@@ -31,6 +31,7 @@ class BackgroundTasks:
         self.auto_response = auto_response
         self.scheduler = AsyncIOScheduler()
         self._seen_messages: dict[str, set[str]] = {}  # chat_id -> set of message_ids
+        self._welcomed_chats: set[str] = self._load_welcomed_chats()  # чаты, которым уже отправлено приветствие
         self._first_check_messages = True  # Флаг первой проверки после запуска
         self._first_check_orders = True  # Флаг первой проверки заказов после запуска
         self._auto_ticket_first_run_done = False  # Флаг первого запуска авто-тикетов
@@ -231,6 +232,9 @@ class BackgroundTasks:
                     
                 # Проверяем кастомные команды
                 await self._check_custom_command(chat_id, content, author_id)
+
+                # Приветственное сообщение (один раз на чат)
+                await self._maybe_send_welcome(chat_id, author_id)
                 
                 # Логируем с указанием роли если есть
                 role_prefix = f"[{', '.join(author_roles)}] " if author_roles else ""
@@ -459,6 +463,75 @@ class BackgroundTasks:
         except Exception as e:
             logger.error(f"Ошибка при очистке данных: {e}", exc_info=True)
     
+    def _load_welcomed_chats(self) -> set:
+        """Загрузить список чатов, которым уже отправлено приветствие."""
+        try:
+            import json
+            from pathlib import Path
+            p = Path("storage/welcomed_chats.json")
+            if p.exists():
+                data = json.load(open(p, encoding="utf-8"))
+                if isinstance(data, list):
+                    return set(str(x) for x in data)
+        except Exception:
+            pass
+        return set()
+
+    def _save_welcomed_chats(self) -> None:
+        """Сохранить список приветствованных чатов (с ограничением размера)."""
+        try:
+            import json
+            from pathlib import Path
+            p = Path("storage/welcomed_chats.json")
+            p.parent.mkdir(parents=True, exist_ok=True)
+            ids = list(self._welcomed_chats)
+            if len(ids) > 5000:
+                ids = ids[-5000:]
+                self._welcomed_chats = set(ids)
+            json.dump(ids, open(p, "w", encoding="utf-8"), ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Ошибка сохранения welcomed_chats.json: {e}")
+
+    async def _maybe_send_welcome(self, chat_id: str, author_id: str):
+        """Отправить приветственное сообщение при первом обращении покупателя."""
+        try:
+            import json
+            from pathlib import Path
+            chat_id = str(chat_id)
+            if not chat_id or chat_id in self._welcomed_chats:
+                return
+
+            wf = Path("storage/welcome_message.json")
+            if not wf.exists():
+                return
+            try:
+                cfg = json.load(open(wf, encoding="utf-8"))
+            except Exception:
+                return
+            if not isinstance(cfg, dict) or not cfg.get("enabled"):
+                return
+
+            text = str(cfg.get("text") or "").strip()
+            if not text:
+                return
+
+            # не приветствуем сами себя
+            try:
+                if not hasattr(self, "_my_user_id"):
+                    user_info = await self.starvell.get_user_info()
+                    self._my_user_id = str(user_info.get("user", {}).get("id", ""))
+                if str(author_id) == self._my_user_id:
+                    return
+            except Exception:
+                pass
+
+            await self.starvell.send_message(chat_id, text)
+            self._welcomed_chats.add(chat_id)
+            self._save_welcomed_chats()
+            logger.info(f"👋 Отправлено приветственное сообщение в чат {chat_id}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки приветствия: {e}", exc_info=True)
+
     async def _check_custom_command(self, chat_id: str, message_text: str, author_id: str):
         """Проверить и обработать кастомную команду"""
         try:

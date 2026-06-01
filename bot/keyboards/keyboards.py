@@ -112,6 +112,11 @@ class CBT:
     # Прокси (доступ к Telegram)
     PROXY_MENU = "proxy"
     SWITCH_PROXY = "switch:proxy"
+
+    # Приветственное сообщение
+    WELCOME_MENU = "welcome"
+    TOGGLE_WELCOME = "welcome:toggle"
+    SET_WELCOME_TEXT = "welcome:text"
     PROXY_SET_TYPE = "proxy:type"
     PROXY_SET_ADDR = "proxy:addr"
     PROXY_SET_AUTH = "proxy:auth"
@@ -243,6 +248,12 @@ def get_main_menu_page_2(update_available: bool = False) -> InlineKeyboardMarkup
             InlineKeyboardButton(
                 text="🌐 Прокси (Telegram)",
                 callback_data=CBT.PROXY_MENU
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="👋 Приветственное сообщение",
+                callback_data=CBT.WELCOME_MENU
             ),
         ],
         [
@@ -1068,6 +1079,31 @@ def get_auto_ticket_settings_menu(
             InlineKeyboardButton(
                 text="🔙 Назад",
                 callback_data=CBT.GLOBAL_SWITCHES
+            )
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_welcome_menu(enabled: bool) -> InlineKeyboardMarkup:
+    """Меню настройки приветственного сообщения."""
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if enabled else '❌'} Статус: {'Включено' if enabled else 'Выключено'}",
+                callback_data=CBT.TOGGLE_WELCOME
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="✏️ Изменить текст",
+                callback_data=CBT.SET_WELCOME_TEXT
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔙 Назад",
+                callback_data=CBT.MAIN_PAGE_2
             )
         ]
     ]
