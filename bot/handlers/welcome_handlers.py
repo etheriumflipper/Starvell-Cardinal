@@ -108,8 +108,11 @@ async def callback_set_welcome_text(callback: CallbackQuery, state: FSMContext, 
     await callback.answer()
     await state.set_state(WelcomeState.waiting_for_text)
     await callback.message.answer(
-        "✏️ Отправьте новый текст приветственного сообщения одним сообщением.\n\n"
-        "Поддерживается HTML-разметка (<b>, <i>, <code> и т.д.).\n"
+        "✏️ <b>Изменение текста приветствия</b>\n\n"
+        "Напишите новый текст и отправьте его одним сообщением в этот чат.\n"
+        "Именно этот текст бот будет отправлять покупателю при первом обращении.\n\n"
+        "Текущий текст будет <b>полностью заменён</b> на новый.\n\n"
+        "Поддерживается HTML-разметка: <b>жирный</b>, <i>курсив</i>, <code>код</code>.\n"
         "Отправьте /cancel для отмены."
     )
 
@@ -124,8 +127,7 @@ async def process_welcome_text(message: Message, state: FSMContext, **kwargs):
 
     new_text = (message.text or "").strip()
     if not new_text:
-        await state.clear()
-        await message.answer("❌ Текст пустой. Пришлите текст через команду /welcome или откройте меню заново.")
+        await message.answer("❌ Нужно отправить текстовое сообщение. Напишите новый текст приветствия и отправьте его.")
         return
     if len(new_text) > 2000:
         await message.answer("❌ Слишком длинный текст (макс. 2000 символов). Сократите.")
@@ -136,8 +138,11 @@ async def process_welcome_text(message: Message, state: FSMContext, **kwargs):
     save_welcome(data)
     await state.clear()
 
+    preview = new_text if len(new_text) <= 100 else new_text[:100] + "…"
     await message.answer(
-        "✅ Текст приветствия сохранён.\n\n"
+        "✅ <b>Текст приветствия сохранён!</b>\n\n"
+        "Теперь при первом обращении покупатель получит:\n"
+        f"<blockquote>{preview}</blockquote>\n\n"
         f"<b>Статус:</b> {'✅ Включено' if data.get('enabled') else '❌ Выключено (включите в меню)'}",
         reply_markup=get_welcome_menu(data.get("enabled", False)),
     )
