@@ -208,6 +208,27 @@ async def cmd_update(message: Message, auto_update, **kwargs):
         )
 
 
+@router.message(Command("check_update"))
+async def cmd_check_update(message: Message, auto_update, **kwargs):
+    """Команда /check_update - проверить наличие обновлений вручную"""
+    if not is_user_authorized(message.from_user.id):
+        return
+
+    status_msg = await message.answer("🔍 Проверка обновлений...")
+
+    update_available = await auto_update.check_for_updates()
+
+    if update_available:
+        await status_msg.edit_text(
+            f"✨ <b>Доступно обновление!</b>\n\n"
+            f"📌 Текущая версия: <code>{auto_update.current_version}</code>\n"
+            f"✨ Новая версия: <code>{auto_update.latest_version}</code>\n\n"
+            f"Чтобы установить — отправьте /update"
+        )
+    else:
+        await status_msg.edit_text(
+            f"✅ Установлена последняя версия: <code>{auto_update.current_version}</code>"
+        )
 
 
 @router.message(Command("session_cookie"))
