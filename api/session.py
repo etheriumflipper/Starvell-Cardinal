@@ -237,6 +237,29 @@ class SessionManager:
             raise StarAPIError(f"Не удалось выполнить запрос после {retry_count} попыток: {last_error}")
         raise StarAPIError("Неизвестная ошибка при выполнении запроса")
 
+    async def probe_status(
+        self,
+        url: str,
+        referer: str = None,
+        timeout_seconds: float = 5,
+    ) -> int:
+        """Быстрая проверка URL без retry — для диагностики при старте."""
+        if self._session is None:
+            await self.start()
+
+        request_headers = self._get_headers(referer)
+        cookies = self._get_cookies(False)
+        timeout = ClientTimeout(total=timeout_seconds, connect=timeout_seconds)
+        await throttle()
+        async with self._session.request(
+            "GET",
+            url,
+            headers=request_headers,
+            cookies=cookies,
+            timeout=timeout,
+        ) as resp:
+            return resp.status
+
     async def ws_connect(
         self,
         url: str,

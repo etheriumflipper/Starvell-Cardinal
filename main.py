@@ -197,10 +197,12 @@ async def main():
     # Запускаем основной бот
     try:
         logger.info("ЗАПУСК БОТА")
+        logger.info("Загрузка модулей...")
         
         # Импортируем основной модуль бота
         from bot.bot_core import main as bot_main
         
+        logger.info("Инициализация...")
         # Запускаем бота
         await bot_main()
         

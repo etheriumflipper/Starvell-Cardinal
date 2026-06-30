@@ -6,6 +6,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from aiohttp import ClientTimeout
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -31,12 +32,43 @@ from bot.plugins import PluginManager, init_plugins_cp
 
 logger = logging.getLogger(__name__)
 
+TELEGRAM_TIMEOUT = ClientTimeout(total=30, connect=10, sock_read=20)
+TELEGRAM_STARTUP_TIMEOUT = 30
+
+
+def _create_bot_session(proxy_url: str | None):
+    """Создать сессию Telegram с таймаутом, чтобы старт не зависал навсегда."""
+    if proxy_url:
+        return AiohttpSession(proxy=proxy_url, timeout=TELEGRAM_TIMEOUT)
+    return AiohttpSession(timeout=TELEGRAM_TIMEOUT)
+
+
+async def _telegram_setup(coro, step: str, *, required: bool = False):
+    """Выполнить шаг настройки Telegram с таймаутом."""
+    try:
+        await asyncio.wait_for(coro, timeout=TELEGRAM_STARTUP_TIMEOUT)
+        return True
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"⚠️ Таймаут {TELEGRAM_STARTUP_TIMEOUT}s: {step}. "
+            "Проверьте интернет или включите Proxy в configs/_main.cfg"
+        )
+        if required:
+            raise
+        return False
+    except Exception as e:
+        logger.warning(f"⚠️ {step}: {e}")
+        if required:
+            raise
+        return False
+
 
 async def main():
     """Главная функция бота (вызывается из главного main.py)"""
     
     # Валидация конфигурации
     try:
+        logger.info("📋 Проверка конфигурации...")
         BotConfig.validate()
         BotConfig.ensure_dirs()
     except ValueError as e:
@@ -51,7 +83,7 @@ async def main():
     proxy_url = BotConfig.PROXY_URL()
     if proxy_url:
         try:
-            bot_session = AiohttpSession(proxy=proxy_url)
+            bot_session = _create_bot_session(proxy_url)
             _safe = proxy_url
             if '@' in _safe:
                 _safe = _safe.split('://', 1)[0] + '://***@' + _safe.split('@', 1)[1]
@@ -67,6 +99,10 @@ async def main():
             logger.error(f"Ошибка инициализации прокси ({e}). Запускаюсь без прокси.")
             bot_session = None
 
+    if bot_session is None:
+        bot_session = _create_bot_session(None)
+
+    logger.info("📡 Подключение к Telegram API...")
     bot = Bot(
         token=BotConfig.BOT_TOKEN(),
         session=bot_session,
@@ -84,27 +120,29 @@ async def main():
         BotCommand(command="session_cookie", description="🔑 Обновить session_cookie"),
         BotCommand(command="keepalive", description="🟢 Статус онлайна Starvell"),
     ]
-    await bot.set_my_commands(commands)
-    logger.info("Меню команд установлено")
+    if await _telegram_setup(bot.set_my_commands(commands), "установка меню команд"):
+        logger.info("Меню команд установлено")
     
     try:
-        await bot.set_my_short_description(
-            "🤖 Starvell Cardinal - автоматизация для Starvell.com\n\n📢 Новости: @starvellingbot"
-        )
-        
-        description = (
-            "🔥 Starvell Cardinal - мощный бот для автоматизации работы на Starvell.com\n\n"
-            "Контакты:\n"
-            "🛠 Автор: @knowtake\n"
-            "💬 Telegram: @knowtake\n"
-            "📢 Канал: @starvellingbot\n"
-        )
-        await bot.set_my_description(description)
-        logger.info("Описание бота установлено")
+        if await _telegram_setup(
+            bot.set_my_short_description(
+                "🤖 Starvell Cardinal - автоматизация для Starvell.com\n\n📢 Новости: @starvellingbot"
+            ),
+            "установка краткого описания",
+        ):
+            description = (
+                "🔥 Starvell Cardinal - мощный бот для автоматизации работы на Starvell.com\n\n"
+                "Контакты:\n"
+                "🛠 Автор: @knowtake\n"
+                "💬 Telegram: @knowtake\n"
+                "📢 Канал: @starvellingbot\n"
+            )
+            if await _telegram_setup(bot.set_my_description(description), "установка описания"):
+                logger.info("Описание бота установлено")
     except Exception as e:
         logger.warning(f"Не удалось установить описание бота: {e}")
     
-    # База данных (JSON хранилище)
+    logger.info("💾 Инициализация хранилища...")
     db = Database(storage_dir=BotConfig.STORAGE_DIR())
     await db.connect()
     
@@ -156,10 +194,13 @@ async def main():
     logger.info("Хэндлеры плагинов зарегистрированы")
     
     try:
+        logger.info("🌐 Подключение к Starvell...")
         await starvell.start()
-        # Первичный запрос сразу получает SID и проверяет, что сессия живая.
-        # KeepAlive использует этот SID для heartbeat.
-        user_info = await starvell.get_user_info()
+        user_info = await asyncio.wait_for(
+            starvell.get_user_info(),
+            timeout=30,
+        )
+        logger.info("✅ Starvell API подключён")
         await auto_delivery.start()
         await auto_restore.start()
         await auto_raise.start()
@@ -189,8 +230,8 @@ async def main():
             logger.debug("Имя бота актуально, пропускаю set_my_name")
         else:
             try:
-                await bot.set_my_name(desired_name)
-                name_cache.write_text(desired_name, encoding="utf-8")
+                if await _telegram_setup(bot.set_my_name(desired_name), "смена имени бота"):
+                    name_cache.write_text(desired_name, encoding="utf-8")
             except Exception as e:
                 error_text = str(e).lower()
                 if "flood control" in error_text or "retry in" in error_text:
@@ -200,6 +241,18 @@ async def main():
             
         logger.info(f"Авторизован как: {user.get('username')} (ID: {user.get('id')})")
         
+    except asyncio.TimeoutError:
+        logger.error("Starvell API не ответил за 30 секунд. Проверьте интернет и session_cookie.")
+        logger.exception("Детальная информация об ошибке:")
+        await auto_response.stop()
+        await keep_alive.stop()
+        await auto_update.stop()
+        await auto_raise.stop()
+        await auto_restore.stop()
+        await auto_delivery.stop()
+        await starvell.stop()
+        await db.close()
+        return
     except Exception as e:
         logger.error(f"Ошибка при подключении к Starvell: {e}")
         logger.exception("Детальная информация об ошибке:")

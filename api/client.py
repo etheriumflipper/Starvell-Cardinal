@@ -1,5 +1,6 @@
 """Основной клиент API"""
 
+import asyncio
 import logging
 from typing import Optional, List, Dict, Any
 
@@ -648,14 +649,17 @@ class StarAPI:
         if self._socket_io_available is not None:
             return self._socket_io_available
 
-        polling_url = (
-            f"{self.config.BASE_URL}/socket.io/?EIO=4&transport=polling"
-        )
+        polling_url = f"{self.config.BASE_URL}/socket.io/?EIO=4&transport=polling"
         try:
-            await self.session.get_text(polling_url)
-            self._socket_io_available = True
-        except (NotFoundError, ForbiddenError, StarAPIError):
+            status = await asyncio.wait_for(
+                self.session.probe_status(polling_url, referer=f"{self.config.BASE_URL}/", timeout_seconds=5),
+                timeout=8.0,
+            )
+            self._socket_io_available = status < 400
+        except Exception:
             self._socket_io_available = False
+
+        if not self._socket_io_available:
             logger.info(
                 "ℹ️ Socket.IO недоступен на Starvell — онлайн через HTTP heartbeat"
             )

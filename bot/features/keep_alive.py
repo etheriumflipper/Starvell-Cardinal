@@ -65,13 +65,8 @@ class KeepAliveService:
 
         self._running = True
         try:
-            self._websocket_enabled = await self.starvell.api.is_socket_io_available()
-            if self._websocket_enabled:
-                self._socket_task = asyncio.create_task(self._online_socket_loop())
-            else:
-                logger.info("🟢 Вечный онлайн: режим HTTP heartbeat (Socket.IO недоступен)")
-
             self._task = asyncio.create_task(self._http_heartbeat_loop())
+            self._socket_task = asyncio.create_task(self._init_websocket_mode())
             logger.info(f"Сервис вечного онлайна запущен (интервал: {self._interval}s)")
         except Exception as e:
             self._running = False
@@ -126,6 +121,22 @@ class KeepAliveService:
             self._socket_task = None
 
         logger.info("⏹️ Сервис вечного онлайна остановлен")
+
+    async def _init_websocket_mode(self):
+        """Проверить Socket.IO в фоне, не блокируя старт бота."""
+        try:
+            api = getattr(self.starvell, "api", None)
+            if not api:
+                return
+            self._websocket_enabled = await api.is_socket_io_available()
+            if self._websocket_enabled:
+                await self._online_socket_loop()
+            else:
+                logger.info("🟢 Вечный онлайн: режим HTTP heartbeat (Socket.IO недоступен)")
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.debug(f"WebSocket init skipped: {e}")
 
     async def _online_socket_loop(self):
         """Держать открытым Socket.IO namespace /online, как браузер Starvell."""
