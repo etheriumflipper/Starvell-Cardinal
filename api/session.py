@@ -13,8 +13,10 @@ from .exceptions import (
     AuthenticationError,
     RateLimitError,
     NotFoundError,
+    ForbiddenError,
     ServerError,
 )
+from .rate_limiter import throttle
 
 
 class SessionManager:
@@ -57,10 +59,12 @@ class SessionManager:
             "accept": "*/*",
             "accept-language": "ru,en;q=0.9",
             "user-agent": self.config.user_agent,
+            **Config.BROWSER_HEADERS,
         }
         
         if referer:
             headers["referer"] = referer
+            headers["origin"] = self.config.BASE_URL
             
         if extra:
             headers.update(extra)
@@ -106,6 +110,7 @@ class SessionManager:
         
         for attempt in range(retry_count):
             try:
+                await throttle()
                 async with self._session.request(
                     "GET",
                     url,
@@ -115,6 +120,8 @@ class SessionManager:
                     # Обработка статус кодов
                     if resp.status == 401:
                         raise AuthenticationError("Неверный session cookie")
+                    elif resp.status == 403:
+                        raise ForbiddenError(f"Доступ запрещён: {url}")
                     elif resp.status == 404:
                         raise NotFoundError(f"Ресурс не найден: {url}")
                     elif resp.status == 429:
@@ -129,7 +136,7 @@ class SessionManager:
                 last_error = e
 
                 # Не повторяем запросы для определенных ошибок
-                if isinstance(e, (AuthenticationError, NotFoundError, RateLimitError)):
+                if isinstance(e, (AuthenticationError, NotFoundError, RateLimitError, ForbiddenError)):
                     raise
 
                 # Последняя попытка
@@ -166,6 +173,7 @@ class SessionManager:
         
         for attempt in range(retry_count):
             try:
+                await throttle()
                 async with self._session.request(
                     "POST",
                     url,
@@ -191,6 +199,8 @@ class SessionManager:
                         raise StarAPIError(f"Bad Request (400): {error_message}")
                     elif resp.status == 401:
                         raise AuthenticationError("Неверный session cookie")
+                    elif resp.status == 403:
+                        raise ForbiddenError(f"Доступ запрещён: {url}")
                     elif resp.status == 404:
                         raise NotFoundError(f"Ресурс не найден: {url}")
                     elif resp.status == 429:
@@ -212,7 +222,7 @@ class SessionManager:
                 last_error = e
 
                 # Не повторяем запросы для определенных ошибок
-                if isinstance(e, (AuthenticationError, NotFoundError, RateLimitError)):
+                if isinstance(e, (AuthenticationError, NotFoundError, RateLimitError, ForbiddenError)):
                     raise
 
                 # Последняя попытка
@@ -269,6 +279,7 @@ class SessionManager:
         
         for attempt in range(retry_count):
             try:
+                await throttle()
                 async with self._session.request(
                     "GET",
                     url,
@@ -278,6 +289,8 @@ class SessionManager:
                     # Обработка статус кодов
                     if resp.status == 401:
                         raise AuthenticationError("Неверный session cookie")
+                    elif resp.status == 403:
+                        raise ForbiddenError(f"Доступ запрещён: {url}")
                     elif resp.status == 404:
                         raise NotFoundError(f"Ресурс не найден: {url}")
                     elif resp.status == 429:
@@ -292,7 +305,7 @@ class SessionManager:
                 last_error = e
 
                 # Не повторяем запросы для определенных ошибок
-                if isinstance(e, (AuthenticationError, NotFoundError, RateLimitError)):
+                if isinstance(e, (AuthenticationError, NotFoundError, RateLimitError, ForbiddenError)):
                     raise
 
                 # Последняя попытка

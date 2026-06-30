@@ -1354,7 +1354,7 @@ logger = logging.getLogger(__name__)
 NAME = "Автоответчик"
 VERSION = "1.0.0"
 DESCRIPTION = "Автоматически отвечает на сообщения"
-AUTHOR = "@embedium"
+AUTHOR = "@knowtake"
 UUID = "auto-reply-plugin-001"
 # === НАСТРОЙКИ ===
 TRIGGER_WORDS = ["помощь", "help", "info"]
@@ -1760,12 +1760,12 @@ async def process_order(order_data: dict, starvell_service) -> bool:
 
 - **Aiogram Documentation**: <https://docs.aiogram.dev/>
 - **Python Async/Await**: <https://docs.python.org/3/library/asyncio.html>
-- **Автор:** @embedium
+- **Автор:** @knowtake
 
 ## Поддержка
 
-- Telegram: @embedium
-- Telegram: @StarvellPlugins
+- Telegram: @knowtake
+- Telegram: @starvellingbot
 
 ---
 

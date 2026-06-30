@@ -1,0 +1,53 @@
+name: 🐛 Bug Report
+description: Сообщить об ошибке в Starvell Cardinal
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за репорт! Опишите проблему максимально подробно.
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия Cardinal
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Платформа
+      options:
+        - Windows
+        - Linux / VPS
+        - Другое
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание проблемы
+      placeholder: Что произошло? Что ожидали?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи
+      description: Фрагмент из logs/bot.log (без session_cookie и токенов!)
+      render: text
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги для воспроизведения
+      placeholder: |
+        1. Запустить бота
+        2. ...
+    validations:
+      required: true

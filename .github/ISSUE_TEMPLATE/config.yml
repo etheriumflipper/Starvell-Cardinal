@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📢 Telegram-канал
+    url: https://t.me/starvellingbot
+    about: Новости, обновления и поддержка
+  - name: 👤 Автор
+    url: https://t.me/knowtake
+    about: Написать автору напрямую

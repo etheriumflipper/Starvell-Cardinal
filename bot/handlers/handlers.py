@@ -134,7 +134,7 @@ async def cmd_start(message: Message, state: FSMContext, auto_update, **kwargs):
             repo_kb = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(
                     text="Хочу такого же бота",
-                    url="https://t.me/embedium"
+                    url="https://t.me/knowtake"
                 )]
             ])
             await message.answer("🔒 Для доступа к боту введите пароль:", reply_markup=repo_kb)
@@ -729,6 +729,7 @@ async def cmd_keepalive(message: Message, keep_alive=None, starvell=None, **kwar
         "🟢 <b>KeepAlive Starvell</b>",
         "",
         f"<b>Сервис:</b> {'включён' if status.get('enabled') else 'выключен'} / {'запущен' if status.get('running') else 'остановлен'}",
+        f"<b>Режим:</b> {'WebSocket + HTTP' if status.get('websocket_enabled', True) else 'HTTP heartbeat (Socket.IO недоступен)'}",
         f"<b>Online websocket:</b> {'живой' if socket_fresh else 'нет свежего подтверждения'}",
         f"<b>Namespaces:</b> <code>{html.escape(', '.join(status.get('connected_namespaces') or []) or '-')}</code>",
         f"<b>Последний websocket:</b> {_format_keepalive_age(socket_last)}",
@@ -1663,14 +1664,13 @@ async def callback_about(callback: CallbackQuery):
     text = (
         "ℹ️ <b>О боте</b>\n\n"
         "Starvell Cardinal — автоматизационный бот для Starvell.com.\n\n"
-        "Автор: @embedium\n"
-        "Telegram: @embedium\n"
-        "Канал с новостями: @StarvellCardinal\n"
-        "Канал с плагинами: @StarvellPlugins\n"
+        "Автор: @knowtake\n"
+        "Telegram: @knowtake\n"
+        "Канал: @starvellingbot\n"
     )
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔗 Telegram", url="https://t.me/embedium")],
+        [InlineKeyboardButton(text="🔗 Telegram", url="https://t.me/knowtake")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data=CBT.MAIN)]
     ])
 

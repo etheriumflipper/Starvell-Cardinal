@@ -101,16 +101,16 @@ LOGO = r"""
 ║                 ⚡ Telegram Bot v{:<16} ⚡                 ║
 ║                                                                      ║
 ║        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━           ║
-║            🚀 Бот для Starvell.com | By @embedium 🚀                 ║
+║            🚀 Бот для Starvell.com | By @knowtake 🚀                 ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
 def print_logo():
     """Вывести логотип"""
     print("\n" + LOGO.format(VERSION))
-    print("By @embedium")
-    print("Telegram: @embedium")
-    print("Telegram: t.me/embedium")
+    print("By @knowtake")
+    print("Telegram: @knowtake")
+    print("Канал: t.me/starvellingbot")
     print()
 
 def set_console_title(title: str):

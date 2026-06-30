@@ -17,8 +17,7 @@ class KeepAliveService:
     """
     Сервис для поддержания онлайн статуса на Starvell
     
-    Периодически отправляет heartbeat запросы к API,
-    чтобы сервер видел что пользователь активен.
+    HTTP heartbeat — основной метод (Socket.IO может быть отключён антиботом).
     """
     
     def __init__(self, starvell):
@@ -40,6 +39,8 @@ class KeepAliveService:
         self._heartbeat_timeout = 15
         self._http_fallback_interval = 30
         self._socket_stale_after = 45
+        self._websocket_enabled = True
+        self._websocket_disabled_logged = False
         self._socket_namespaces = (
             "/chats",
             "/user-notifications",
@@ -57,17 +58,20 @@ class KeepAliveService:
             logger.warning("Сервис вечного онлайна уже запущен")
             return
 
-        # Проверяем включено ли в конфиге
         if not BotConfig.KEEP_ALIVE_ENABLED():
             logger.info("⏸️ Вечный онлайн отключен в настройках")
             self._running = False
             return
 
-        # Устанавливаем флаг и запускаем фоновую задачу
         self._running = True
         try:
-            self._socket_task = asyncio.create_task(self._online_socket_loop())
-            self._task = asyncio.create_task(self._http_fallback_loop())
+            self._websocket_enabled = await self.starvell.api.is_socket_io_available()
+            if self._websocket_enabled:
+                self._socket_task = asyncio.create_task(self._online_socket_loop())
+            else:
+                logger.info("🟢 Вечный онлайн: режим HTTP heartbeat (Socket.IO недоступен)")
+
+            self._task = asyncio.create_task(self._http_heartbeat_loop())
             logger.info(f"Сервис вечного онлайна запущен (интервал: {self._interval}s)")
         except Exception as e:
             self._running = False
@@ -81,6 +85,10 @@ class KeepAliveService:
         if not self._running:
             await self.start()
             return True
+
+        if not self._websocket_enabled:
+            await self._send_heartbeat()
+            return self._fail_count == 0
 
         if self._socket_task:
             self._socket_task.cancel()
@@ -121,7 +129,7 @@ class KeepAliveService:
 
     async def _online_socket_loop(self):
         """Держать открытым Socket.IO namespace /online, как браузер Starvell."""
-        while self._running:
+        while self._running and self._websocket_enabled:
             websocket = None
             try:
                 websocket = await asyncio.wait_for(
@@ -186,13 +194,28 @@ class KeepAliveService:
             except Exception as e:
                 self._socket_fail_count += 1
                 self._last_socket_error = str(e)
-                logger.warning(f"⚠️ Online websocket /online отвалился: {e} (ошибок подряд: {self._socket_fail_count})")
+                error_text = str(e).lower()
+                if "404" in error_text or "socket.io" in error_text:
+                    self._disable_websocket("Socket.IO недоступен на Starvell")
+                    break
+                if self._socket_fail_count <= 3 or self._socket_fail_count % 10 == 0:
+                    logger.warning(
+                        f"⚠️ Online websocket /online отвалился: {e} "
+                        f"(ошибок подряд: {self._socket_fail_count})"
+                    )
             finally:
                 if websocket and not websocket.closed:
                     await websocket.close()
 
-            if self._running:
+            if self._running and self._websocket_enabled:
                 await asyncio.sleep(self._socket_reconnect_delay())
+
+    def _disable_websocket(self, reason: str):
+        if self._websocket_enabled:
+            self._websocket_enabled = False
+            if not self._websocket_disabled_logged:
+                logger.info(f"ℹ️ {reason} — переключаюсь на HTTP heartbeat")
+                self._websocket_disabled_logged = True
 
     def _mark_socket_success(self):
         self._last_socket_success = asyncio.get_event_loop().time()
@@ -217,33 +240,38 @@ class KeepAliveService:
             return 10
         return min(120, 10 * min(self._socket_fail_count, 12))
         
-    async def _http_fallback_loop(self):
-        """Редкий HTTP fallback, если websocket давно не подтверждал онлайн."""
-        logger.debug("KeepAlive HTTP fallback loop started")
+    async def _http_heartbeat_loop(self):
+        """Основной HTTP heartbeat для поддержания онлайна."""
+        logger.debug("KeepAlive HTTP heartbeat loop started")
         while self._running:
             try:
                 if self._task and self._task.cancelled():
                     break
 
                 self._interval = max(BotConfig.KEEP_ALIVE_INTERVAL(), self._http_fallback_interval)
-                await asyncio.sleep(self._interval)
 
                 if not BotConfig.KEEP_ALIVE_ENABLED():
                     logger.debug("Вечный онлайн отключен, пропускаем heartbeat")
+                    await asyncio.sleep(self._interval)
                     continue
 
                 now = asyncio.get_event_loop().time()
-                if self._last_socket_success and now - self._last_socket_success < self._socket_stale_after:
-                    continue
+                socket_fresh = (
+                    self._websocket_enabled
+                    and self._last_socket_success
+                    and now - self._last_socket_success < self._socket_stale_after
+                )
 
-                logger.debug("Websocket давно не подтверждал онлайн, отправляю HTTP fallback")
-                await self._send_heartbeat()
+                if not socket_fresh:
+                    await self._send_heartbeat()
+
+                await asyncio.sleep(self._interval)
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Ошибка в цикле вечного онлайна: {e}", exc_info=True)
-                await asyncio.sleep(5)  # Короткая пауза перед повтором
+                await asyncio.sleep(5)
                 
     async def _send_heartbeat(self):
         """Отправить heartbeat запрос"""
@@ -260,7 +288,8 @@ class KeepAliveService:
                 logger.debug("💚 Heartbeat отправлен успешно")
             else:
                 self._fail_count += 1
-                logger.warning(f"⚠️ Heartbeat не удался (ошибок подряд: {self._fail_count})")
+                if self._fail_count <= 3 or self._fail_count % 10 == 0:
+                    logger.warning(f"⚠️ Heartbeat не удался (ошибок подряд: {self._fail_count})")
                 
         except asyncio.TimeoutError:
             self._fail_count += 1
@@ -280,6 +309,7 @@ class KeepAliveService:
             "running": self._running,
             "enabled": BotConfig.KEEP_ALIVE_ENABLED(),
             "interval": self._interval,
+            "websocket_enabled": self._websocket_enabled,
             "last_success": self._last_success,
             "last_socket_success": self._last_socket_success,
             "fail_count": self._fail_count,

@@ -89,16 +89,15 @@ async def main():
     
     try:
         await bot.set_my_short_description(
-            "🤖 Starvell Cardinal - автоматизация для Starvell.com\n\n📢 Новости: @StarvellCardinal\n🐞 Плагины: @StarvellPlugins"
+            "🤖 Starvell Cardinal - автоматизация для Starvell.com\n\n📢 Новости: @starvellingbot"
         )
         
         description = (
             "🔥 Starvell Cardinal - мощный бот для автоматизации работы на Starvell.com\n\n"
             "Контакты:\n"
-            "🛠 Автор: @embedium\n"
-            "💬 Telegram: @embedium\n"
-            "📢 Канал с новостями: @StarvellCardinal\n"
-            "🐞 Канал с плагинами: @StarvellPlugins\n"
+            "🛠 Автор: @knowtake\n"
+            "💬 Telegram: @knowtake\n"
+            "📢 Канал: @starvellingbot\n"
         )
         await bot.set_my_description(description)
         logger.info("Описание бота установлено")
@@ -180,12 +179,24 @@ async def main():
             
         user = user_info.get("user", {})
         
-        # Обновляем имя бота
+        # Обновляем имя бота (не чаще чем нужно — Telegram flood control)
         nickname = user.get("nickname") or user.get("username") or "Trader"
-        try:
-            await bot.set_my_name(f"{nickname} | Starvell Cardinal")
-        except Exception as e:
-            logger.warning(f"Не удалось изменить имя бота: {e}")
+        desired_name = f"{nickname} | Starvell Cardinal"
+        name_cache = Path(BotConfig.STORAGE_DIR()) / "cache" / "bot_display_name.txt"
+        name_cache.parent.mkdir(parents=True, exist_ok=True)
+        cached_name = name_cache.read_text(encoding="utf-8").strip() if name_cache.exists() else ""
+        if cached_name == desired_name:
+            logger.debug("Имя бота актуально, пропускаю set_my_name")
+        else:
+            try:
+                await bot.set_my_name(desired_name)
+                name_cache.write_text(desired_name, encoding="utf-8")
+            except Exception as e:
+                error_text = str(e).lower()
+                if "flood control" in error_text or "retry in" in error_text:
+                    logger.info("ℹ️ Telegram ограничил смену имени бота — пропускаю до следующего запуска")
+                else:
+                    logger.warning(f"Не удалось изменить имя бота: {e}")
             
         logger.info(f"Авторизован как: {user.get('username')} (ID: {user.get('id')})")
         

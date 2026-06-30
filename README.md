@@ -1,38 +1,37 @@
 <div align="center">
 
-# ✨ Starvell Cardinal
+<!-- Banner -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:1a1a2e,50:16213e,100:0f3460&height=180&section=header&text=Starvell%20Cardinal&fontSize=42&fontColor=e94560&animation=fadeIn&fontAlignY=32&desc=Telegram-бот%20для%20автоматизации%20Starvell&descAlignY=55&descSize=16&descAlign=50" width="100%" />
+
+<br/>
+
+[![Version](https://img.shields.io/badge/version-0.3.0-e94560?style=for-the-badge&logo=semantic-release&logoColor=white)](version.py)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](requirements.txt)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/starvellingbot)
+[![Starvell](https://img.shields.io/badge/Starvell-Automation-0f3460?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDJMMTUuMDkgOC4yNkwyMiAxMi4wOUwxNS4wOSAxNS43NEwxMiAyMkwxMiAxMi4wOUw1IDEyLjA5TDEyIDJaIi8+PC9zdmc+)](https://starvell.com)
+[![License](https://img.shields.io/badge/License-MIT-16213e?style=for-the-badge)](LICENSE)
 
 <p>
-  <a href="https://t.me/StarvellCardinal">📢 Канал</a> •
-  <a href="https://t.me/StarvellPlugins">🧩 Плагины</a> •
-  <a href="https://t.me/embedium">👤 Автор</a> •
-  <a href="https://github.com/etheriumflipper/StarvellCardinal">💻 GitHub</a>
+  <a href="https://t.me/starvellingbot"><b>📢 Канал</b></a> •
+  <a href="https://t.me/knowtake"><b>👤 Автор</b></a> •
+  <a href="https://github.com/etheriumflipper/StarvellCardinal"><b>💻 GitHub</b></a>
 </p>
 
-<p>
-  <img src="https://img.shields.io/badge/Starvell-Automation-1f6feb?style=for-the-badge" alt="Starvell Automation" />
-  <img src="https://img.shields.io/badge/Telegram-Bot-2ea44f?style=for-the-badge" alt="Telegram Bot" />
-  <img src="https://img.shields.io/badge/Linux-Systemd-f2cc60?style=for-the-badge" alt="Linux Systemd" />
-</p>
+---
 
-<h3>Starvell Cardinal — Telegram-бот для автоматизации работы со Starvell</h3>
+**Starvell Cardinal** — Telegram-бот для продавцов на [Starvell.com](https://starvell.com).  
+Автоподнятие лотов · автоответы · авто-выдача · вечный онлайн · плагины · автообновления.
 
-<p>⚙️ Чистый Cardinal • 🔄 Автообновления • 🧩 Система плагинов • 🛠️ Установка одной командой</p>
+<br/>
+
+```ascii
+   ★  S T A R V E L L   C A R D I N A L  ★
+        автоматизация · плагины · онлайн
+```
 
 </div>
 
-> Starvell Cardinal — это Telegram-бот для автоматизации работы со Starvell. Starvell Cardinal помогает управлять заказами, лотами, уведомлениями, плагинами и обновлениями из одной панели.
-
-Starvell Cardinal создан для продавцов, которым нужен удобный Telegram-интерфейс вокруг Starvell. Проект делает упор на быструю установку, автоматическую обработку заказов, поддержку плагинов, обновления через GitHub и запуск на Linux-хостинге через `systemd`.
-
-Если вы ищете `Starvell Cardinal`, это основной публичный GitHub-репозиторий проекта с актуальным установщиком, исходным кодом, релизами и системой автообновлений.
-
-Быстрые ссылки:
-
-- GitHub: https://github.com/etheriumflipper/StarvellCardinal
-- Telegram-канал: https://t.me/StarvellCardinal
-- Telegram-плагины: https://t.me/StarvellPlugins
-- Автор: https://t.me/embedium
+---
 
 ## ⚡ Установка одной командой
 
@@ -42,59 +41,11 @@ wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/ins
 
 ## 🚀 Быстрый старт
 
+<table>
+<tr>
+<td width="50%">
+
 ### 🐧 Linux / VPS
-
-Установка одной командой:
-
-```bash
-wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/install.sh -O install.sh && bash install.sh
-```
-
-Управление сервисом после установки:
-
-```bash
-sudo systemctl status starvell-cardinal
-sudo systemctl restart starvell-cardinal
-sudo systemctl stop starvell-cardinal
-sudo journalctl -u starvell-cardinal -f
-```
-
-### 🪟 Windows
-
-```bash
-git clone https://github.com/etheriumflipper/StarvellCardinal.git
-cd StarvellCardinal
-Setup.bat
-Start.bat
-```
-
-## 🧠 Что умеет Starvell Cardinal
-
-- ⚙️ Автоматизировать работу со `Starvell.com`
-- 📦 Управлять лотами и товарами
-- 📨 Отслеживать заказы и сообщения
-- 🔔 Отправлять уведомления в Telegram
-- 🛠️ Проводить первичную настройку через мастер
-- 🔄 Проверять обновления и уведомлять о новых версиях
-- 🧩 Поддерживать отдельную систему плагинов
-
-## 🔄 Автообновления
-
-Starvell Cardinal умеет проверять обновления при запуске и в фоне.
-
-Когда в репозитории выходит новая версия:
-
-- 👀 бот видит новую `VERSION`
-- 📨 администраторам приходит уведомление в Telegram
-- 🏷️ в сообщении показывается текущая и новая версия
-- 🔘 доступна кнопка `Обновить сейчас`
-- ⌨️ также можно использовать команду `/update`
-
-Важно: чтобы обновление обнаружилось, перед публикацией новой версии нужно повышать `VERSION` в [version.py](version.py).
-
-## 📥 Установка из репозитория
-
-Если хотите установить вручную:
 
 ```bash
 git clone https://github.com/etheriumflipper/StarvellCardinal.git
@@ -102,58 +53,88 @@ cd StarvellCardinal
 sudo bash install.sh
 ```
 
-Установщик:
+```bash
+sudo systemctl status starvell-cardinal
+sudo journalctl -u starvell-cardinal -f
+```
 
-- 📦 ставит зависимости
-- 🐍 создает виртуальное окружение
-- 🧭 запускает `first_setup.py`
-- 🔌 создает `systemd`-сервис
-- 🟢 поднимает бота в автономном режиме
+</td>
+<td width="50%">
+
+### 🪟 Windows
+
+```bat
+git clone https://github.com/etheriumflipper/StarvellCardinal.git
+cd StarvellCardinal
+Setup.bat
+Start.bat
+```
+
+</td>
+</tr>
+</table>
+
+## 🧠 Возможности
+
+| Функция | Описание |
+|---------|----------|
+| 📦 **Авто-поднятие** | Bump лотов по всем категориям автоматически |
+| 💬 **Автоответы** | Ответы на сообщения покупателей |
+| 🎁 **Авто-выдача** | Выдача товаров по шаблонам |
+| 🟢 **Вечный онлайн** | HTTP heartbeat + Socket.IO (если доступен) |
+| 🧩 **Плагины** | Расширяемая система модулей |
+| 🔄 **Автообновления** | Уведомления и `/update` из GitHub |
+
+## 🛡️ Антибот Starvell (v0.3.0)
+
+Starvell усилил защиту (QRATOR). Cardinal адаптирован:
+
+- ✅ Запросы профиля через **Next.js Data API** вместо HTML `/users/` (фикс 403)
+- ✅ **Browser-like headers** + rate limiter для всех запросов
+- ✅ **HTTP heartbeat** как основной метод онлайна (Socket.IO может быть 404)
+- ✅ Умная обработка **Telegram flood control** при смене имени бота
 
 ## 🧷 Первый запуск
 
-Во время настройки бот попросит:
-
 1. `Bot Token` от `@BotFather`
-2. пароль для доступа к боту
-3. `session_cookie` от `Starvell.com`
+2. Пароль для доступа к боту
+3. `session_cookie` от Starvell.com
 
-После завершения мастер создает `configs/_main.cfg`, а сервис запускается автоматически.
+Мастер создаст `configs/_main.cfg` и запустит сервис.
 
-## 🗂️ Структура проекта
+## 🗂️ Структура
 
 ```text
 StarvellCardinal/
-├── main.py
-├── first_setup.py
-├── version.py
-├── install.sh
-├── start.sh
-├── api/
-├── bot/
-├── configs/
-├── docs/
-├── plugins/
-└── storage/
+├── main.py              # Точка входа
+├── api/                 # Starvell API клиент
+├── bot/                 # Telegram-бот
+├── configs/             # Конфигурация
+├── docs/                # Документация
+└── plugins/             # Плагины (пусто в чистой версии)
 ```
 
-`plugins/` в публичной версии остается пустой, чтобы вы могли развернуть чистый Cardinal и добавлять нужные плагины отдельно.
+## 🔄 Автообновления
 
-## 🛠️ Разработка
+При выходе новой версии админы получают уведомление с кнопкой **«Обновить сейчас»** или командой `/update`.
 
-- 🧠 Логика бота: `bot/`
-- 🌐 API-интеграция: `api/`
-- 🧩 Система плагинов: `bot/plugins/` и `plugins/`
-- 📘 Документация по плагинам: [docs/PLUGINS_API.md](docs/PLUGINS_API.md)
+> Перед релизом повышайте `VERSION` в [version.py](version.py).
 
 ## 🔗 Ссылки
 
-- 👤 Автор: [@embedium](https://t.me/embedium)
-- 📢 Telegram-канал: [@StarvellCardinal](https://t.me/StarvellCardinal)
-- 🧩 Плагины: [@StarvellPlugins](https://t.me/StarvellPlugins)
-- 💻 GitHub: [etheriumflipper/StarvellCardinal](https://github.com/etheriumflipper/StarvellCardinal)
-- 🌍 Платформа: [Starvell.com](https://starvell.com)
+| | |
+|---|---|
+| 👤 Автор | [@knowtake](https://t.me/knowtake) |
+| 📢 Канал | [@starvellingbot](https://t.me/starvellingbot) |
+| 💻 GitHub | [etheriumflipper/StarvellCardinal](https://github.com/etheriumflipper/StarvellCardinal) |
+| 🌍 Starvell | [starvell.com](https://starvell.com) |
 
 ## 📄 Лицензия
 
-Проект распространяется по лицензии [MIT](LICENSE).
+[MIT](LICENSE) © [@knowtake](https://t.me/knowtake)
+
+---
+
+<div align="center">
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:1a1a2e,50:16213e,100:0f3460&height=100&section=footer&fontSize=14&fontColor=e94560&text=Made%20with%20%E2%9D%A4%20by%20@knowtake" width="100%" />
+</div>

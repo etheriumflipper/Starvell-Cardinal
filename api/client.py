@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 from .config import Config
 from .session import SessionManager
 from .utils import BuildIdCache, extract_build_id, extract_sid_from_cookies
-from .exceptions import NotFoundError
+from .exceptions import NotFoundError, ForbiddenError, StarAPIError
 
 logger = logging.getLogger("API")
 
@@ -37,6 +37,7 @@ class StarAPI:
         self.config = Config(user_agent=user_agent, timeout=timeout)
         self.session = SessionManager(session_cookie, self.config)
         self._build_id_cache = BuildIdCache(ttl=self.config.BUILD_ID_CACHE_TTL)
+        self._socket_io_available: Optional[bool] = None
         
     async def __aenter__(self):
         await self.session.start()
@@ -67,6 +68,7 @@ class StarAPI:
         path: str,
         params: Optional[str] = None,
         include_sid: bool = False,
+        referer: Optional[str] = None,
     ) -> dict:
         """
         Получить данные из Next.js Data API
@@ -75,6 +77,7 @@ class StarAPI:
             path: Путь (например, "index.json" или "chat.json")
             params: Query параметры (например, "?offer_id=123")
             include_sid: Включить SID cookie в запрос
+            referer: Referer для запроса
         """
         for attempt in range(2):
             try:
@@ -86,7 +89,7 @@ class StarAPI:
                     
                 data = await self.session.get_json(
                     url,
-                    referer=f"{self.config.BASE_URL}/",
+                    referer=referer or f"{self.config.BASE_URL}/",
                     headers={"x-nextjs-data": "1"},
                     include_sid=include_sid,
                 )
@@ -101,6 +104,41 @@ class StarAPI:
                 raise
                 
         raise RuntimeError("Не удалось получить Next.js данные")
+
+    async def _get_user_page_props(self, user_id: int) -> dict:
+        """
+        Получить pageProps профиля пользователя через Next.js Data API.
+        HTML /users/{id} часто блокируется антиботом (403), JSON — работает.
+        """
+        referer = f"{self.config.BASE_URL}/users/{user_id}"
+        data = await self._get_next_data(
+            f"users/{user_id}.json",
+            params=f"?user_id={user_id}",
+            include_sid=True,
+            referer=referer,
+        )
+        return data.get("pageProps", {})
+
+    def _extract_user_categories(self, page_props: dict) -> Dict[int, List[int]]:
+        """Сгруппировать категории лотов пользователя по game_id."""
+        categories = page_props.get("userProfileOffers")
+        if not categories:
+            categories = (page_props.get("bff") or {}).get("userProfileOffers")
+        if not categories:
+            categories = page_props.get("categoriesWithOffers") or []
+
+        game_categories: Dict[int, List[int]] = {}
+        for category in categories:
+            if not isinstance(category, dict):
+                continue
+            game_id = category.get("gameId")
+            category_id = category.get("id")
+            offers = category.get("offers") or []
+            if game_id and category_id and offers:
+                game_categories.setdefault(game_id, [])
+                if category_id not in game_categories[game_id]:
+                    game_categories[game_id].append(category_id)
+        return game_categories
         
     # ==================== Аутентификация ====================
     
@@ -509,58 +547,23 @@ class StarAPI:
         Returns:
             list: Список офферов пользователя
         """
-        logger.debug(f"🔍 Запрашиваю страницу пользователя {user_id}...")
-        
-        html = await self.session.get_text(
-            f"{self.config.BASE_URL}/users/{user_id}",
-            headers={
-                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "cache-control": "max-age=0",
-                "upgrade-insecure-requests": "1",
-            },
-        )
-        
-        logger.debug(f"📄 Получена HTML-страница, размер: {len(html)} байт")
-        
-        # Парсим __NEXT_DATA__
-        import re
-        import json
-        
-        marker = '<script id="__NEXT_DATA__" type="application/json">'
-        idx = html.find(marker)
-        if idx == -1:
-            logger.warning("⚠️ Не найден маркер __NEXT_DATA__ на странице")
-            return []
-            
-        json_start = html.find('{', idx)
-        if json_start == -1:
-            logger.warning("⚠️ Не найдено начало JSON в __NEXT_DATA__")
-            return []
-            
-        json_end = html.find('</script>', json_start)
-        if json_end == -1:
-            logger.warning("⚠️ Не найден конец JSON в __NEXT_DATA__")
-            return []
-            
-        data = json.loads(html[json_start:json_end])
-        logger.debug("✅ JSON успешно распарсен")
-        
-        page_props = data.get("props", {}).get("pageProps", {})
-        categories = page_props.get("categoriesWithOffers", [])
-        
-        logger.debug(f"📊 Найдено категорий: {len(categories)}")
-        
+        logger.debug(f"🔍 Запрашиваю лоты пользователя {user_id} через Next.js Data API...")
+        page_props = await self._get_user_page_props(user_id)
+
+        categories = page_props.get("userProfileOffers")
+        if not categories:
+            categories = (page_props.get("bff") or {}).get("userProfileOffers")
+        if not categories:
+            categories = page_props.get("categoriesWithOffers") or []
+
         offers = []
         for category in categories:
             category_offers = category.get("offers", [])
-            logger.debug(f"  - Категория: {len(category_offers)} лотов")
-            
             for offer in category_offers:
                 offer_id = offer.get("id")
                 price = offer.get("price")
                 availability = offer.get("availability")
                 
-                # Формируем название
                 brief = (offer.get("descriptions") or {}).get("rus", {}).get("briefDescription")
                 attrs = offer.get("attributes", [])
                 labels = [a.get("valueLabel") for a in attrs if a.get("valueLabel")]
@@ -588,66 +591,14 @@ class StarAPI:
         Returns:
             dict: Словарь {game_id: [category_ids]} - все категории пользователя по играм
         """
-        logger.debug(f"🔍 Запрашиваю категории пользователя {user_id}...")
-        
-        html = await self.session.get_text(
-            f"{self.config.BASE_URL}/users/{user_id}",
-            headers={
-                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "cache-control": "max-age=0",
-                "upgrade-insecure-requests": "1",
-            },
-        )
-        
-        # Парсим __NEXT_DATA__
-        import json
-        
-        marker = '<script id="__NEXT_DATA__" type="application/json">'
-        idx = html.find(marker)
-        if idx == -1:
-            logger.warning("⚠️ Не найден маркер __NEXT_DATA__ на странице")
-            return {}
-            
-        json_start = html.find('{', idx)
-        json_end = html.find('</script>', json_start)
-        if json_start == -1 or json_end == -1:
-            logger.warning("⚠️ Ошибка парсинга JSON")
-            return {}
-            
-        data = json.loads(html[json_start:json_end])
-        page_props = data.get("props", {}).get("pageProps", {})
-        
-        logger.debug(f"📊 pageProps keys: {list(page_props.keys())}")
-        
-        # Правильный путь - userProfileOffers, а не categoriesWithOffers!
-        categories = page_props.get("userProfileOffers", [])
-        
-        logger.debug(f"📊 RAW userProfileOffers: {categories[:2] if categories else 'EMPTY'}")
-        logger.debug(f"📊 Всего userProfileOffers: {len(categories)}")
-        
-        # Группируем категории по играм
-        game_categories = {}
-        for idx, category in enumerate(categories):
-            logger.debug(f"  - Категория #{idx}: keys={list(category.keys())}")
-            
-            game_id = category.get("gameId")
-            category_id = category.get("id")  # ID самой категории
-            offers = category.get("offers", [])
-            offer_count = len(offers)
-            
-            logger.debug(f"    gameId={game_id}, categoryId={category_id}, offers={offer_count}")
-            
-            if game_id and category_id and offer_count > 0:
-                if game_id not in game_categories:
-                    game_categories[game_id] = []
-                if category_id not in game_categories[game_id]:
-                    game_categories[game_id].append(category_id)
-                    logger.debug(f"    ✅ Добавлено: game {game_id} -> category {category_id}")
-                    
+        logger.debug(f"🔍 Запрашиваю категории пользователя {user_id} через Next.js Data API...")
+        page_props = await self._get_user_page_props(user_id)
+        game_categories = self._extract_user_categories(page_props)
+
         logger.debug(f"📦 Найдено игр: {len(game_categories)}")
         for game_id, cat_ids in game_categories.items():
             logger.debug(f"  🎮 Game {game_id}: категории {cat_ids}")
-            
+
         return game_categories
     
     # ==================== Поддержка онлайна ====================
@@ -692,11 +643,32 @@ class StarAPI:
 
         return False
 
+    async def is_socket_io_available(self) -> bool:
+        """Проверить, доступен ли Socket.IO на Starvell (может быть отключён антиботом)."""
+        if self._socket_io_available is not None:
+            return self._socket_io_available
+
+        polling_url = (
+            f"{self.config.BASE_URL}/socket.io/?EIO=4&transport=polling"
+        )
+        try:
+            await self.session.get_text(polling_url)
+            self._socket_io_available = True
+        except (NotFoundError, ForbiddenError, StarAPIError):
+            self._socket_io_available = False
+            logger.info(
+                "ℹ️ Socket.IO недоступен на Starvell — онлайн через HTTP heartbeat"
+            )
+        return self._socket_io_available
+
     async def connect_online_socket(self):
         """
         Открыть реальный Socket.IO namespace /online, который использует фронт Starvell
         для поддержания онлайн-статуса.
         """
+        if not await self.is_socket_io_available():
+            raise NotFoundError("Socket.IO отключён на Starvell")
+
         if not self.session.get_sid():
             try:
                 await self.get_user_info()
