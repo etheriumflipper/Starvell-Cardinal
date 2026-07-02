@@ -18,7 +18,22 @@ from bot.features.autoticket import get_autoticket_service
 
 logger = logging.getLogger(__name__)
 
-logging.getLogger('apscheduler').setLevel(logging.ERROR)
+
+class _SuppressSchedulerCancelledFilter(logging.Filter):
+    """Не спамить ERROR при рестарте бота (APScheduler отменяет задачи в полёте)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.exc_info:
+            exc = record.exc_info[1]
+            if isinstance(exc, asyncio.CancelledError):
+                return False
+        return True
+
+
+for _scheduler_logger_name in ("apscheduler", "apscheduler.executors.default"):
+    _sched_logger = logging.getLogger(_scheduler_logger_name)
+    _sched_logger.setLevel(logging.WARNING)
+    _sched_logger.addFilter(_SuppressSchedulerCancelledFilter())
 
 
 class BackgroundTasks:
@@ -45,6 +60,8 @@ class BackgroundTasks:
             'interval',
             seconds=max(1, int(chat_interval)),
             id='check_messages',
+            max_instances=1,
+            coalesce=True,
         )
         
         # Проверка новых заказов
@@ -54,6 +71,8 @@ class BackgroundTasks:
             'interval',
             seconds=max(1, int(orders_interval)),
             id='check_orders',
+            max_instances=1,
+            coalesce=True,
         )
         
         # Авто-bump офферов
@@ -108,26 +127,25 @@ class BackgroundTasks:
         
     def stop(self):
         """Остановить фоновые задачи"""
-        self.scheduler.shutdown()
+        if self.scheduler.running:
+            self.scheduler.shutdown(wait=False)
         logger.info("Фоновые задачи остановлены")
         
     async def _check_new_messages_loop(self):
         """Polling цикл для проверки новых сообщений"""
         try:
-            # ВСЕГДА проверяем сообщения (для плагинов и кастомных команд)
-            # Уведомления будут отправлены только если включены (проверка внутри notify_new_message)
             await self._check_new_messages()
-                    
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             logger.error(f"Ошибка при проверке сообщений: {e}", exc_info=True)
             
     async def _check_new_orders_loop(self):
         """Polling цикл для проверки новых заказов """
         try:
-            # ВСЕГДА проверяем заказы (для плагинов)
-            # Уведомления будут отправлены только если включены (проверка внутри notify_new_order)
             await self._check_new_orders()
-                    
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             logger.error(f"Ошибка при проверке заказов: {e}", exc_info=True)
             
@@ -258,6 +276,8 @@ class BackgroundTasks:
                         seen_chats.add(cid)
                         await self.starvell.mark_chat_as_read(cid)
                     
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             logger.error(f"Ошибка при проверке новых сообщений: {e}", exc_info=True)
             
@@ -387,6 +407,8 @@ class BackgroundTasks:
                 logger.info(f"🛒 Новый заказ #{short_id} от {buyer_name}: {lot_name} - {amount}₽")
                 logger.debug(f"Полные данные заказа: {order}")
                     
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             logger.error(f"Ошибка при проверке новых заказов: {e}", exc_info=True)
             

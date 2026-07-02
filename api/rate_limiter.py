@@ -30,15 +30,18 @@ class _AsyncMinIntervalLimiter:
 
     async def wait(self) -> None:
         loop = asyncio.get_running_loop()
-        async with self._lock:
-            now = loop.time()
-            if self._next_allowed <= 0.0:
-                self._next_allowed = now
-            delay = self._next_allowed - now
-            if delay > 0:
-                await asyncio.sleep(delay)
+        try:
+            async with self._lock:
                 now = loop.time()
-            self._next_allowed = now + self._min_interval
+                if self._next_allowed <= 0.0:
+                    self._next_allowed = now
+                delay = self._next_allowed - now
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                    now = loop.time()
+                self._next_allowed = now + self._min_interval
+        except asyncio.CancelledError:
+            raise
 
 
 _limiter = _AsyncMinIntervalLimiter(MIN_INTERVAL_SECONDS)
