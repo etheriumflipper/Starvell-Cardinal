@@ -80,6 +80,28 @@ configure_safe_directory() {
     git config --global --add safe.directory "$INSTALL_DIR" || true
 }
 
+ensure_git_repo() {
+    if [[ -d "$INSTALL_DIR/.git" ]]; then
+        log "Git-репозиторий уже настроен в $INSTALL_DIR"
+        return
+    fi
+
+    local branch="main"
+    log "Настраиваю git-репозиторий для автообновлений в $INSTALL_DIR ..."
+
+    runuser -u "$APP_USER" -- bash -lc "
+        set -e
+        cd '$INSTALL_DIR'
+        git -c safe.directory='$INSTALL_DIR' init -b '$branch'
+        git -c safe.directory='$INSTALL_DIR' remote add origin '$REPOSITORY_URL' 2>/dev/null || \
+            git -c safe.directory='$INSTALL_DIR' remote set-url origin '$REPOSITORY_URL'
+        git -c safe.directory='$INSTALL_DIR' fetch origin '$branch' --depth 1
+        git -c safe.directory='$INSTALL_DIR' reset --hard 'origin/$branch'
+    "
+
+    log "Git-репозиторий настроен — /update будет работать."
+}
+
 sync_project() {
     log "Копирую проект в $INSTALL_DIR ..."
     mkdir -p "$INSTALL_DIR"
@@ -255,6 +277,7 @@ main() {
     setup_python
     fix_permissions
     configure_safe_directory
+    ensure_git_repo
     write_env_file
     run_first_setup
     fix_runtime_permissions

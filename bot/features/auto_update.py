@@ -11,10 +11,13 @@ from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime, timedelta
 
-from version import VERSION, VERSION_URL
+from version import VERSION, VERSION_URL, REPOSITORY_URL
 from bot.core.config import BotConfig
 
 logger = logging.getLogger("AutoUpdate")
+
+PROTECTED_DIRS = ("configs", "storage", "plugins", "logs", "docs")
+GIT_BRANCH = "main"
 
 
 class AutoUpdateService:
@@ -251,6 +254,116 @@ class AutoUpdateService:
             logger.error(f"Ошибка сравнения версий: {e}")
             return False
     
+    def _repair_git_repository_sync(self, repo_dir: Path) -> tuple[bool, str]:
+        """
+        Починить установку без .git (zip / rsync install.sh).
+        Сохраняет configs, storage, plugins, logs, docs.
+        """
+        import shutil
+        import subprocess
+
+        if (repo_dir / ".git").exists():
+            return True, ""
+
+        logger.info("🔧 .git не найден — автоматическая починка репозитория...")
+
+        backup_dir = repo_dir.parent / ".starvell_git_repair_backup"
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir)
+        backup_dir.mkdir()
+
+        repo_str = str(repo_dir).replace("\\", "/")
+
+        def raw_git(*args: str, timeout: int = 120) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                ["git", "-c", f"safe.directory={repo_str}", *args],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+
+        try:
+            for folder in PROTECTED_DIRS:
+                src = repo_dir / folder
+                if src.exists():
+                    shutil.move(str(src), str(backup_dir / folder))
+                    logger.info(f"💾 Сохранён {folder}/")
+
+            init = raw_git("init", "-b", GIT_BRANCH)
+            if init.returncode != 0:
+                return False, init.stderr.strip() or "git init failed"
+
+            remote = raw_git("remote", "get-url", "origin")
+            if remote.returncode != 0:
+                add = raw_git("remote", "add", "origin", REPOSITORY_URL)
+            else:
+                add = raw_git("remote", "set-url", "origin", REPOSITORY_URL)
+            if add.returncode != 0:
+                return False, add.stderr.strip() or "git remote failed"
+
+            fetch = raw_git("fetch", "origin", GIT_BRANCH, "--depth", "1", timeout=180)
+            if fetch.returncode != 0:
+                return False, fetch.stderr.strip() or "git fetch failed"
+
+            reset = raw_git("reset", "--hard", f"origin/{GIT_BRANCH}")
+            if reset.returncode != 0:
+                return False, reset.stderr.strip() or "git reset failed"
+
+            for folder in PROTECTED_DIRS:
+                src = backup_dir / folder
+                dst = repo_dir / folder
+                if src.exists():
+                    if dst.exists():
+                        shutil.rmtree(dst)
+                    shutil.move(str(src), str(dst))
+                    logger.info(f"📦 Восстановлен {folder}/")
+
+            logger.info("✅ Git-репозиторий восстановлен автоматически")
+            return True, ""
+        except Exception as e:
+            logger.error(f"Ошибка починки git: {e}", exc_info=True)
+            return False, str(e)
+        finally:
+            for folder in PROTECTED_DIRS:
+                src = backup_dir / folder
+                dst = repo_dir / folder
+                if src.exists() and not dst.exists():
+                    try:
+                        shutil.move(str(src), str(dst))
+                        logger.warning(f"♻️ Восстановлен {folder}/ после сбоя починки git")
+                    except Exception:
+                        pass
+            try:
+                if backup_dir.exists():
+                    shutil.rmtree(backup_dir)
+            except Exception:
+                pass
+
+    def _ensure_git_remote_sync(self, repo_dir: Path) -> None:
+        """Добавить origin, если .git есть, но remote не настроен."""
+        import subprocess
+
+        if not (repo_dir / ".git").exists():
+            return
+
+        repo_str = str(repo_dir).replace("\\", "/")
+        check = subprocess.run(
+            ["git", "-c", f"safe.directory={repo_str}", "remote", "get-url", "origin"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if check.returncode != 0:
+            subprocess.run(
+                ["git", "-c", f"safe.directory={repo_str}", "remote", "add", "origin", REPOSITORY_URL],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
     async def perform_update(self) -> dict:
         """
         Выполнить обновление (pull из git)
@@ -262,14 +375,11 @@ class AutoUpdateService:
         try:
             logger.info("🔄 Начинаю безопасное обновление...")
             
-            # Проверяем что мы в git репозитории
             import subprocess
-            repo_dir = str(Path.cwd().resolve()).replace("\\", "/")
+            repo_path = Path.cwd().resolve()
+            repo_dir = str(repo_path).replace("\\", "/")
 
             def git_cmd(*args: str) -> list[str]:
-                # Базовая команда + safe.directory + дефолтная git identity,
-                # чтобы git merge/commit не падал, если на сервере не сконфигурён
-                # user.name/user.email (актуально для systemd-юзеров вроде starvell).
                 return [
                     "git",
                     "-c", f"safe.directory={repo_dir}",
@@ -277,14 +387,26 @@ class AutoUpdateService:
                     "-c", "user.email=cardinal@starvell.local",
                     *args,
                 ]
-            
-            # Проверяем наличие .git
-            if not Path(".git").exists():
-                return {
-                    "success": False,
-                    "message": "❌ Это не Git репозиторий!",
-                    "output": "Директория .git не найдена"
-                }
+
+            if not (repo_path / ".git").exists():
+                repaired, repair_error = await asyncio.to_thread(
+                    self._repair_git_repository_sync, repo_path
+                )
+                if not repaired:
+                    return {
+                        "success": False,
+                        "message": (
+                            "❌ Это не Git репозиторий!\n\n"
+                            f"{repair_error}\n\n"
+                            "Чаще всего бот установлен через zip или install.sh без git.\n"
+                            "Запусти на сервере:\n"
+                            "<code>cd /opt/starvell-cardinal\n"
+                            "python fix_git_repo.py</code>"
+                        ),
+                        "output": repair_error or "Директория .git не найдена",
+                    }
+            else:
+                await asyncio.to_thread(self._ensure_git_remote_sync, repo_path)
             
             # Сохраняем текущую ветку
             result = subprocess.run(

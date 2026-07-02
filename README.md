@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=28&duration=3000&pause=800&color=C41E3A&center=true&vCenter=true&width=520&lines=Starvell+Cardinal;Automation+for+Starvell.com;Plugins+%C2%B7+Logs+%C2%B7+API" alt="Typing SVG" />
+  <img src="docs/assets/banner.png" alt="Starvell Cardinal — единственный рабочий кардинал под Starvell" width="100%" />
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Cardinal-v0.3.7-C41E3A?style=flat-square&labelColor=1a0a0d" />
+  <img src="https://img.shields.io/badge/Cardinal-v0.3.8-C41E3A?style=flat-square&labelColor=1a0a0d" />
   <img src="https://img.shields.io/badge/Python-3.8+-FFD700?style=flat-square&labelColor=1a0a0d&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-2d1b1f?style=flat-square&labelColor=1a0a0d" />
   <img src="https://img.shields.io/badge/License-MIT-8B0000?style=flat-square&labelColor=1a0a0d" />
@@ -60,20 +60,24 @@ HTTP keep-alive
 
 ## ⚡ Установка
 
+> **Важно:** для автообновлений нужен **git clone**, не скачивание zip с GitHub.
+
 ```bash
 wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/install.sh -O install.sh && bash install.sh
 ```
 
 <details>
-<summary><b>🐧 Linux / VPS</b></summary>
+<summary><b>🐧 Linux / VPS (рекомендуется)</b></summary>
 
 ```bash
 git clone https://github.com/etheriumflipper/StarvellCardinal.git
 cd StarvellCardinal
 sudo bash install.sh
 sudo systemctl enable --now starvell-cardinal
-sudo journalctl -u starvell-cardinal -f    # логи в реальном времени
+sudo journalctl -u starvell-cardinal -f
 ```
+
+`install.sh` сам настроит git в `/opt/starvell-cardinal` — `/update` заработает сразу.
 
 </details>
 
@@ -91,6 +95,42 @@ Start.bat
 
 <br>
 
+## 🔄 Обновление
+
+### Через бота
+
+```
+/update          — установить последнюю версию
+/check_update    — только проверить
+```
+
+### ⚠️ «Это не Git репозиторий!»
+
+Так бывает, если бот поставили **через zip** или старый `install.sh` скопировал файлы без `.git`.
+
+**Автоматически (v0.3.8+):** бот сам попробует починить репозиторий при `/update`.
+
+**Вручную на сервере:**
+
+```bash
+cd /opt/starvell-cardinal    # или твоя папка с main.py
+python fix_git_repo.py
+sudo systemctl restart starvell-cardinal
+```
+
+**Или через git напрямую:**
+
+```bash
+cd /opt/starvell-cardinal
+sudo -u starvell git fetch origin main
+sudo -u starvell git reset --hard origin/main
+sudo systemctl restart starvell-cardinal
+```
+
+> Твои `configs/`, `storage/`, `plugins/`, `logs/` при этом **не трогаются**.
+
+<br>
+
 ## 🎛️ Модули
 
 | | Модуль | Что делает |
@@ -101,7 +141,7 @@ Start.bat
 | 🤖 | **Auto-response** | Ответы на новые заказы |
 | 🟢 | **Keep-alive** | Вечный онлайн (HTTP heartbeat, Socket.IO fallback) |
 | 🧩 | **Plugins** | Python-модули в `plugins/` — [документация](docs/PLUGINS_API.md) |
-| 🔄 | **Auto-update** | `/update` с GitHub Releases |
+| 🔄 | **Auto-update** | `/update` с GitHub — авто-починка git |
 
 <br>
 
@@ -145,10 +185,11 @@ newOrders = 0
 ```text
 StarvellCardinal/
 ├── main.py
+├── fix_git_repo.py   # починка автообновления
 ├── api/              # Starvell client (Next.js + REST)
 ├── bot/
 │   ├── core/         # chat_listener, notifications, services
-│   ├── features/     # auto_raise, keep_alive, tasks
+│   ├── features/     # auto_raise, keep_alive, auto_update
 │   └── plugins/      # plugin manager
 ├── configs/_main.cfg
 ├── docs/             # API_REFERENCE · PLUGINS_API
@@ -161,11 +202,11 @@ StarvellCardinal/
 
 | Ver | Highlights |
 |:---:|:---|
-| **0.3.7** | TG-уведомления off по умолчанию · только логи |
+| **0.3.8** | Авто-починка git при `/update` · install.sh настраивает `.git` |
+| **0.3.7** | TG-уведомления off по умолчанию · redesign README |
 | **0.3.6** | Fix `lastMessage` DM detection · unread on startup |
 | **0.3.5** | FunPay-style chat events для плагинов |
 | **0.3.4** | Auto-raise 403 fallback chain |
-| **0.3.0** | Anti-bot · rebrand @knowtake |
 
 <br>
 
