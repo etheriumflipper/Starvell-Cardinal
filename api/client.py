@@ -924,6 +924,27 @@ class StarAPI:
             return self._socket_io_available
 
         await self._is_qrator_protected()
+
+        if self._qrator_cache:
+            try:
+                ws = await asyncio.wait_for(
+                    self.session.ws_connect(
+                        self._socket_io_wss_url(),
+                        referer=f"{self.config.BASE_URL}/",
+                        headers={"origin": self.config.BASE_URL},
+                        include_sid=False,
+                    ),
+                    timeout=12.0,
+                )
+                await ws.close()
+                self._socket_io_available = True
+                logger.info("✅ Socket.IO доступен (QRATOR :8443)")
+                return True
+            except Exception as exc:
+                logger.warning(f"⚠️ QRATOR websocket probe failed: {exc}")
+                self._socket_io_available = False
+                return False
+
         polling_url = f"{self._socket_io_http_base()}/socket.io/?EIO=4&transport=polling"
         try:
             status = await asyncio.wait_for(
