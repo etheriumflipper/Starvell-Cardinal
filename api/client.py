@@ -278,6 +278,23 @@ class StarAPI:
             logger.debug(f"discover_offer_ids failed: {exc}")
         return offer_ids
 
+    def _merge_category_maps(
+        self,
+        primary: Dict[int, List[int]],
+        secondary: Dict[int, List[int]],
+    ) -> Dict[int, List[int]]:
+        """Объединить категории (secondary дополняет primary, напр. кэш + sells)."""
+        merged: Dict[int, List[int]] = {
+            int(gid): list(cats) for gid, cats in primary.items()
+        }
+        for gid, cats in secondary.items():
+            merged.setdefault(int(gid), [])
+            for cat_id in cats:
+                cid = int(cat_id)
+                if cid not in merged[int(gid)]:
+                    merged[int(gid)].append(cid)
+        return merged
+
     async def _resolve_user_categories(self, user_id: int) -> Dict[int, List[int]]:
         """Полная цепочка получения категорий для авто-поднятия."""
         cached = self._load_categories_cache(user_id)
@@ -290,6 +307,8 @@ class StarAPI:
         try:
             page_props = await self._get_user_page_props(user_id)
             game_categories = self._extract_user_categories(page_props)
+            if cached:
+                game_categories = self._merge_category_maps(game_categories, cached)
             if game_categories:
                 self._save_categories_cache(user_id, game_categories)
                 self._profile_blocked_until = 0.0
