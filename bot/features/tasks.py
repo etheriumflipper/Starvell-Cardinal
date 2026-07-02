@@ -5,9 +5,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+import sys
+from datetime import datetime, timedelta, timezone
+from traceback import format_tb
 from aiogram import Bot
+from apscheduler.events import (
+    EVENT_JOB_ERROR,
+    EVENT_JOB_EXECUTED,
+    EVENT_JOB_MISSED,
+    JobExecutionEvent,
+)
+from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.util import iscoroutinefunction_partial
 
 from api.utils import safe_float
 from bot.core.config import BotConfig, get_config_manager
@@ -17,6 +27,85 @@ from bot.features.autoticket import get_autoticket_service
 
 
 logger = logging.getLogger(__name__)
+
+
+async def _quiet_run_coroutine_job(job, jobstore_alias, run_times, logger_name):
+    """APScheduler runner без ERROR при CancelledError (рестарт бота)."""
+    events = []
+    job_logger = logging.getLogger(logger_name)
+    for run_time in run_times:
+        if job.misfire_grace_time is not None:
+            difference = datetime.now(timezone.utc) - run_time
+            grace_time = timedelta(seconds=job.misfire_grace_time)
+            if difference > grace_time:
+                events.append(
+                    JobExecutionEvent(
+                        EVENT_JOB_MISSED, job.id, jobstore_alias, run_time
+                    )
+                )
+                job_logger.warning('Run time of job "%s" was missed by %s', job, difference)
+                continue
+
+        job_logger.debug('Running job "%s" (scheduled at %s)', job, run_time)
+        try:
+            retval = await job.func(*job.args, **job.kwargs)
+        except asyncio.CancelledError:
+            return events
+        except BaseException:
+            exc, tb = sys.exc_info()[1:]
+            formatted_tb = "".join(format_tb(tb))
+            events.append(
+                JobExecutionEvent(
+                    EVENT_JOB_ERROR,
+                    job.id,
+                    jobstore_alias,
+                    run_time,
+                    exception=exc,
+                    traceback=formatted_tb,
+                )
+            )
+            job_logger.exception('Job "%s" raised an exception', job)
+            import traceback as tb_mod
+            tb_mod.clear_frames(tb)
+        else:
+            events.append(
+                JobExecutionEvent(
+                    EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval
+                )
+            )
+            job_logger.debug('Job "%s" executed successfully', job)
+
+    return events
+
+
+class QuietAsyncIOExecutor(AsyncIOExecutor):
+    """AsyncIO executor: не логирует CancelledError при остановке."""
+
+    def _do_submit_job(self, job, run_times):
+        def callback(fut):
+            self._pending_futures.discard(fut)
+            try:
+                events = fut.result()
+            except asyncio.CancelledError:
+                return
+            except BaseException:
+                self._run_job_error(job.id, *sys.exc_info()[1:])
+            else:
+                self._run_job_success(job.id, events)
+
+        if iscoroutinefunction_partial(job.func):
+            coro = _quiet_run_coroutine_job(
+                job, job._jobstore_alias, run_times, self._logger.name
+            )
+            fut = self._eventloop.create_task(coro)
+        else:
+            from apscheduler.executors.base import run_job
+            fut = self._eventloop.run_in_executor(
+                None, run_job, job, job._jobstore_alias, run_times, self._logger.name
+            )
+
+        fut.add_done_callback(callback)
+        self._pending_futures.add(fut)
 
 
 class _SuppressSchedulerCancelledFilter(logging.Filter):
@@ -45,7 +134,7 @@ class BackgroundTasks:
         self.db = db
         self.notifier = notifier
         self.auto_response = auto_response
-        self.scheduler = AsyncIOScheduler()
+        self.scheduler = AsyncIOScheduler(executors={"default": QuietAsyncIOExecutor()})
         self._seen_messages: dict[str, set[str]] = {}  # chat_id -> set of message_ids
         self._welcomed_chats: set[str] = self._load_welcomed_chats()  # чаты, которым уже отправлено приветствие
         self._first_check_orders = True  # Флаг первой проверки заказов после запуска
@@ -128,6 +217,7 @@ class BackgroundTasks:
     def stop(self):
         """Остановить фоновые задачи"""
         if self.scheduler.running:
+            self.scheduler.pause()
             self.scheduler.shutdown(wait=False)
         logger.info("Фоновые задачи остановлены")
         
