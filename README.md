@@ -1,8 +1,4 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Starvell Cardinal — единственный рабочий кардинал под Starvell" width="100%" />
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/Cardinal-v0.3.8-C41E3A?style=flat-square&labelColor=1a0a0d" />
   <img src="https://img.shields.io/badge/Python-3.8+-FFD700?style=flat-square&labelColor=1a0a0d&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-2d1b1f?style=flat-square&labelColor=1a0a0d" />
@@ -13,6 +9,10 @@
   <a href="https://t.me/starvellingbot"><img src="https://img.shields.io/badge/Канал-@starvellingbot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" /></a>
   <a href="https://t.me/knowtake"><img src="https://img.shields.io/badge/Автор-@knowtake-C41E3A?style=for-the-badge&logo=telegram&logoColor=white" /></a>
   <a href="https://starvell.com"><img src="https://img.shields.io/badge/Starvell-marketplace-0f3460?style=for-the-badge" /></a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Starvell Cardinal — единственный рабочий кардинал под Starvell" width="100%" />
 </p>
 
 <br>
