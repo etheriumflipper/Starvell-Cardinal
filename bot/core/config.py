@@ -86,7 +86,12 @@ class ConfigManager:
                 'orderConfirm': 'false',
                 'orderConfirmText': 'Спасибо за покупку! Если возникнут вопросы - обращайтесь.',
                 'reviewResponse': 'false',
-                'reviewResponseText': 'Благодарю за отзыв! Рад был помочь.'
+                'reviewResponseText': (
+                    '🙏 Спасибо за ваш отзыв!\n'
+                    'Мы очень ценим ваше мнение и будем стараться работать ещё лучше.\n\n'
+                    '📅 {date}\n'
+                    '✨ Хорошего дня!'
+                ),
             },
             'Monitor': {
                 'chatPollInterval': '5',
@@ -521,8 +526,17 @@ class BotConfig:
     
     @staticmethod
     def REVIEW_RESPONSE_TEXT() -> str:
-        """Текст автоответа на отзыв"""
-        return _config_manager.get('AutoResponse', 'reviewResponseText', 'Благодарю за отзыв! Рад был помочь.')
+        """Текст автоответа на отзыв. Поддерживает {date} (МСК)."""
+        return _config_manager.get(
+            'AutoResponse',
+            'reviewResponseText',
+            (
+                "🙏 Спасибо за ваш отзыв!\n"
+                "Мы очень ценим ваше мнение и будем стараться работать ещё лучше.\n\n"
+                "📅 {date}\n"
+                "✨ Хорошего дня!"
+            ),
+        )
     
     # === Автообновление ===
     @staticmethod

@@ -55,6 +55,99 @@ def _safe_float(val, default=0.0):
         return default
 
 
+def _price_rub(order: dict) -> float:
+    """Цена заказа в рублях (API отдаёт копейки)."""
+    raw = order.get("basePrice")
+    if raw is None:
+        raw = order.get("totalPrice") or order.get("price") or 0
+    return _safe_float(raw) / 100.0
+
+
+def _extract_balance(user_data: dict):
+    """Достать доступный и замороженный баланс из разных форматов API."""
+    balance_raw = user_data.get("balance", 0)
+    if isinstance(balance_raw, dict):
+        balance = _safe_float(
+            balance_raw.get("rubBalance", balance_raw.get("available", 0))
+        )
+    else:
+        balance = _safe_float(balance_raw)
+
+    hold_raw = user_data.get("holdBalance", user_data.get("holdedAmount", 0))
+    if isinstance(hold_raw, dict):
+        hold_balance = _safe_float(hold_raw.get("amount", hold_raw.get("value", 0)))
+    else:
+        hold_balance = _safe_float(hold_raw)
+    return balance, hold_balance
+
+
+def _is_verified(user_data: dict) -> bool:
+    if user_data.get("verified") is True:
+        return True
+    return str(user_data.get("kycStatus", "")).upper() == "VERIFIED"
+
+
+def _format_created_at(created_at) -> str:
+    if not created_at or created_at == "Неизвестно":
+        return "Неизвестно"
+    from datetime import datetime
+    try:
+        dt = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+        return dt.strftime("%d.%m.%Y %H:%M")
+    except Exception:
+        return str(created_at)
+
+
+def _build_profile_text(user_data: dict, orders: list = None) -> str:
+    """Единый текст профиля продавца."""
+    username = user_data.get("username", "Неизвестно")
+    user_id = user_data.get("id", "?")
+    balance, hold_balance = _extract_balance(user_data)
+    total_balance = balance + hold_balance
+    verified = "✅ Верифицирован" if _is_verified(user_data) else "❌ Не верифицирован"
+    created_at = _format_created_at(user_data.get("createdAt", "Неизвестно"))
+    rating = _safe_float(user_data.get("rating", 0))
+    reviews_count = user_data.get("reviewsCount", 0) or 0
+
+    text = (
+        f"👤 <b>Профиль продавца</b>\n\n"
+        f"<b>Имя:</b> {username}\n"
+        f"<b>ID:</b> <code>{user_id}</code>\n"
+        f"<b>Статус:</b> {verified}\n"
+        f"<b>Регистрация:</b> {created_at}\n\n"
+        f"💰 <b>Баланс:</b>\n"
+        f"├ Доступно: <code>{balance:.2f}</code> ₽\n"
+        f"├ Заморожено: <code>{hold_balance:.2f}</code> ₽\n"
+        f"└ Всего: <code>{total_balance:.2f}</code> ₽\n\n"
+        f"⭐ <b>Рейтинг:</b> {rating:.1f} ({reviews_count} отзывов)"
+    )
+    if orders is not None:
+        total_orders = len(orders)
+        active_orders = sum(
+            1 for o in orders
+            if str(o.get("status", "")).upper() not in ("COMPLETED", "CANCELLED")
+        )
+        text += (
+            f"\n\n📦 <b>Заказы:</b>\n"
+            f"├ Всего: <code>{total_orders}</code>\n"
+            f"└ Активных: <code>{active_orders}</code>"
+        )
+    return text
+
+
+def _profile_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="📊 Подробная статистика",
+            callback_data="profile_stats"
+        )],
+        [InlineKeyboardButton(
+            text="🔄 Обновить",
+            callback_data="profile_refresh"
+        )],
+    ])
+
+
 def _format_keepalive_age(monotonic_time):
     if not monotonic_time:
         return "нет"
@@ -350,63 +443,8 @@ async def cmd_profile(message: Message, starvell, **kwargs):
             return
         
         user_data = user_info.get("user", {})
-        
-        # Формируем информацию о профиле
-        username = user_data.get("username", "Неизвестно")
-        user_id = user_data.get("id", "?")
-        
-        # Баланс может быть числом или словарем, безопасно извлекаем
-        balance_raw = user_data.get("balance", 0)
-        balance = balance_raw if isinstance(balance_raw, (int, float)) else 0
-        
-        hold_balance_raw = user_data.get("holdBalance", 0)
-        hold_balance = hold_balance_raw if isinstance(hold_balance_raw, (int, float)) else 0
-        
-        total_balance = balance + hold_balance
-        
-        # Получаем статус верификации
-        verified = "✅ Верифицирован" if user_data.get("verified") else "❌ Не верифицирован"
-        
-        # Получаем дату регистрации
-        created_at = user_data.get("createdAt", "Неизвестно")
-        if created_at != "Неизвестно":
-            from datetime import datetime
-            try:
-                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                created_at = dt.strftime("%d.%m.%Y %H:%M")
-            except:
-                pass
-        
-        # Рейтинг и отзывы
-        rating = user_data.get("rating", 0)
-        reviews_count = user_data.get("reviewsCount", 0)
-        
-        text = f"👤 <b>Профиль продавца</b>\n\n"
-        text += f"<b>Имя:</b> {username}\n"
-        text += f"<b>ID:</b> <code>{user_id}</code>\n"
-        text += f"<b>Статус:</b> {verified}\n"
-        text += f"<b>Регистрация:</b> {created_at}\n\n"
-        text = f"💰 <b>Баланс:</b>\n"
-        text += f"├ Доступно: <code>{_safe_float(balance):.2f}</code> ₽\n"
-        text += f"├ Заморожено: <code>{_safe_float(hold_balance):.2f}</code> ₽\n"
-        text += f"└ Всего: <code>{_safe_float(total_balance):.2f}</code> ₽\n\n"
-        text += f"⭐ <b>Рейтинг:</b> {_safe_float(rating):.1f} ({reviews_count} отзывов)"
-
-        # Кнопка для статистики
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="📊 Подробная статистика",
-                callback_data="profile_stats"
-            )],
-            [InlineKeyboardButton(
-                text="🔄 Обновить",
-                callback_data="profile_refresh"
-            )]
-        ])
-
-    # Балансы уже форматированы безопасно выше, замены не требуются
-
-        await message.answer(text, reply_markup=keyboard)
+        text = _build_profile_text(user_data)
+        await message.answer(text, reply_markup=_profile_keyboard())
         
     except Exception as e:
         await message.answer(f"❌ Ошибка при получении профиля: {e}")
@@ -418,7 +456,6 @@ async def callback_profile_refresh(callback: CallbackQuery, starvell, **kwargs):
     await callback.answer("🔄 Обновление...")
     
     try:
-        # Получаем информацию о пользователе
         user_info = await starvell.get_user_info()
         
         if not user_info.get("authorized"):
@@ -426,61 +463,8 @@ async def callback_profile_refresh(callback: CallbackQuery, starvell, **kwargs):
             return
         
         user_data = user_info.get("user", {})
-        
-        # Формируем информацию о профиле
-        username = user_data.get("username", "Неизвестно")
-        user_id = user_data.get("id", "?")
-        
-        # Баланс может быть числом или словарем, безопасно извлекаем
-        balance_raw = user_data.get("balance", 0)
-        balance = balance_raw if isinstance(balance_raw, (int, float)) else 0
-        
-        hold_balance_raw = user_data.get("holdBalance", 0)
-        hold_balance = hold_balance_raw if isinstance(hold_balance_raw, (int, float)) else 0
-        
-        total_balance = balance + hold_balance
-        
-        # Получаем статус верификации
-        verified = "✅ Верифицирован" if user_data.get("verified") else "❌ Не верифицирован"
-        
-        # Получаем дату регистрации
-        created_at = user_data.get("createdAt", "Неизвестно")
-        if created_at != "Неизвестно":
-            from datetime import datetime
-            try:
-                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                created_at = dt.strftime("%d.%m.%Y %H:%M")
-            except:
-                pass
-        
-        # Рейтинг и отзывы
-        rating = user_data.get("rating", 0)
-        reviews_count = user_data.get("reviewsCount", 0)
-        
-        text = f"👤 <b>Профиль продавца</b>\n\n"
-        text += f"<b>Имя:</b> {username}\n"
-        text += f"<b>ID:</b> <code>{user_id}</code>\n"
-        text += f"<b>Статус:</b> {verified}\n"
-        text += f"<b>Регистрация:</b> {created_at}\n\n"
-        text += f"💰 <b>Баланс:</b>\n"
-        text += f"├ Доступно: <code>{_safe_float(balance):.2f}</code> ₽\n"
-        text += f"├ Заморожено: <code>{_safe_float(hold_balance):.2f}</code> ₽\n"
-        text += f"└ Всего: <code>{_safe_float(total_balance):.2f}</code> ₽\n\n"
-        text += f"⭐ <b>Рейтинг:</b> {rating:.1f} ({reviews_count} отзывов)"
-        
-        # Кнопка для статистики
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="📊 Подробная статистика",
-                callback_data="profile_stats"
-            )],
-            [InlineKeyboardButton(
-                text="🔄 Обновить",
-                callback_data="profile_refresh"
-            )]
-        ])
-        
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        text = _build_profile_text(user_data)
+        await callback.message.edit_text(text, reply_markup=_profile_keyboard())
         
     except Exception as e:
         await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
@@ -492,97 +476,109 @@ async def callback_profile_stats(callback: CallbackQuery, starvell, **kwargs):
     await callback.answer("📊 Загрузка статистики...")
     
     try:
-        # Получаем заказы
+        from datetime import datetime, timedelta, timezone
+
         orders = await starvell.get_orders()
-        
-        # Анализируем статистику (проверка регистра статуса)
+        user_info = getattr(starvell, "last_user_info", None) or {}
+        user_data = user_info.get("user", {}) if isinstance(user_info, dict) else {}
+
         total_orders = len(orders)
-        completed_orders = sum(1 for order in orders if str(order.get("status")).upper() == "COMPLETED")
-        cancelled_orders = sum(1 for order in orders if str(order.get("status")).upper() == "CANCELLED")
+        completed_orders = sum(
+            1 for order in orders if str(order.get("status", "")).upper() == "COMPLETED"
+        )
+        cancelled_orders = sum(
+            1 for order in orders if str(order.get("status", "")).upper() == "CANCELLED"
+        )
         active_orders = total_orders - completed_orders - cancelled_orders
-        
-        # Считаем доход (ключ basePrice)
-        total_income = sum(order.get("basePrice", 0) for order in orders if str(order.get("status")).upper() == "COMPLETED")
-        
-        # Считаем среднюю оценку
-        reviews = [order.get("review", {}) for order in orders if order.get("review")]
-        avg_rating = sum(r.get("rating", 0) for r in reviews) / len(reviews) if reviews else starvell.last_user_info.get("user", {}).get("rating", 0)
-        
-        # Статистика по датам
-        from datetime import datetime, timedelta
-        now = datetime.now()
+
+        total_income = sum(
+            _price_rub(order)
+            for order in orders
+            if str(order.get("status", "")).upper() == "COMPLETED"
+        )
+
+        reviews = [
+            order.get("review", {})
+            for order in orders
+            if isinstance(order.get("review"), dict)
+        ]
+        if reviews:
+            avg_rating = sum(_safe_float(r.get("rating", 0)) for r in reviews) / len(reviews)
+        else:
+            avg_rating = _safe_float(user_data.get("rating", 0))
+        reviews_count = user_data.get("reviewsCount")
+        if reviews_count is None:
+            reviews_count = len(reviews)
+
+        now = datetime.now(timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = today_start - timedelta(days=7)
         month_start = today_start - timedelta(days=30)
-        
-        orders_today = 0
-        orders_week = 0
-        orders_month = 0
-        income_today = 0
-        income_week = 0
-        income_month = 0
-        
+
+        orders_today = orders_week = orders_month = 0
+        income_today = income_week = income_month = 0.0
+
         for order in orders:
-            if order.get("status") != "completed":
+            if str(order.get("status", "")).upper() != "COMPLETED":
                 continue
-                
+
             created_at = order.get("createdAt")
             if not created_at:
                 continue
-                
+
             try:
-                order_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                order_price = order.get("basePrice", 0)
-                
+                order_date = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+                if order_date.tzinfo is None:
+                    order_date = order_date.replace(tzinfo=timezone.utc)
+                order_price = _price_rub(order)
+
                 if order_date >= today_start:
                     orders_today += 1
                     income_today += order_price
-                    
                 if order_date >= week_start:
                     orders_week += 1
                     income_week += order_price
-                    
                 if order_date >= month_start:
                     orders_month += 1
                     income_month += order_price
-            except:
+            except Exception:
                 continue
-        
-        text = f"📊 <b>Подробная статистика</b>\n\n"
-        text += f"📦 <b>Заказы:</b>\n"
-        text += f"├ Всего: <code>{total_orders}</code>\n"
-        text += f"├ Завершено: <code>{completed_orders}</code> ({completed_orders/total_orders*100 if total_orders else 0:.1f}%)\n"
-        text += f"├ Активных: <code>{active_orders}</code>\n"
-        text += f"└ Отменено: <code>{cancelled_orders}</code>\n\n"
-        
-        text += f"💰 <b>Доход (завершенные):</b>\n"
-        text += f"├ За сегодня: <code>{_safe_float(income_today):.2f}</code> ₽ ({orders_today} зак.)\n"
-        text += f"├ За неделю: <code>{_safe_float(income_week):.2f}</code> ₽ ({orders_week} зак.)\n"
-        text += f"├ За месяц: <code>{_safe_float(income_month):.2f}</code> ₽ ({orders_month} зак.)\n"
-        text += f"└ Всего: <code>{_safe_float(total_income):.2f}</code> ₽\n\n"
-        
-        text += f"⭐ <b>Отзывы:</b>\n"
-        text += f"├ Средняя оценка: <code>{_safe_float(avg_rating):.2f}</code>\n"
-        text += f"└ Всего отзывов: <code>{len(reviews)}</code>\n\n"
-        
-        if total_orders > 0:
-            avg_order_value = _safe_float(total_income) / completed_orders if completed_orders else 0
-            text += f"📈 <b>Средний чек:</b> <code>{_safe_float(avg_order_value):.2f}</code> ₽"
-        
-        # Кнопки управления
+
+        text = (
+            f"📊 <b>Подробная статистика</b>\n\n"
+            f"📦 <b>Заказы:</b>\n"
+            f"├ Всего: <code>{total_orders}</code>\n"
+            f"├ Завершено: <code>{completed_orders}</code> "
+            f"({completed_orders / total_orders * 100 if total_orders else 0:.1f}%)\n"
+            f"├ Активных: <code>{active_orders}</code>\n"
+            f"└ Отменено: <code>{cancelled_orders}</code>\n\n"
+            f"💰 <b>Доход (завершенные):</b>\n"
+            f"├ За сегодня: <code>{income_today:.2f}</code> ₽ ({orders_today} зак.)\n"
+            f"├ За неделю: <code>{income_week:.2f}</code> ₽ ({orders_week} зак.)\n"
+            f"├ За месяц: <code>{income_month:.2f}</code> ₽ ({orders_month} зак.)\n"
+            f"└ Всего: <code>{total_income:.2f}</code> ₽\n\n"
+            f"⭐ <b>Отзывы:</b>\n"
+            f"├ Средняя оценка: <code>{avg_rating:.2f}</code>\n"
+            f"└ Всего отзывов: <code>{reviews_count}</code>\n"
+        )
+
+        if completed_orders > 0:
+            avg_order_value = total_income / completed_orders
+            text += f"\n📈 <b>Средний чек:</b> <code>{avg_order_value:.2f}</code> ₽"
+
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="� Обновить статистику",
+                text="🔄 Обновить статистику",
                 callback_data="profile_stats"
             )],
             [InlineKeyboardButton(
-                text="� Вернуться к профилю",
+                text="🔙 Вернуться к профилю",
                 callback_data="profile_back"
             )]
         ])
-        
+
         await callback.message.edit_text(text, reply_markup=keyboard)
-        
+
     except Exception as e:
         await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
@@ -591,78 +587,35 @@ async def callback_profile_stats(callback: CallbackQuery, starvell, **kwargs):
 async def callback_profile_back(callback: CallbackQuery, starvell, **kwargs):
     """Вернуться к профилю"""
     await callback.answer()
-    
-    # Получаем информацию о пользователе
-    user_info = await starvell.get_user_info()
-    
-    if not user_info.get("authorized"):
-        await callback.answer("❌ Не авторизован", show_alert=True)
-        return
-    
-    user = user_info.get("user", {})
-    username = user.get("username", "Неизвестно")
-    user_id = user.get("id", "N/A")
-    # Получаем баланс корректно
-    balance_data = user.get("balance", {})
-    balance = balance_data.get("rubBalance", 0) if isinstance(balance_data, dict) else 0
-    hold_balance = user.get("holdedAmount", 0)
-    
-    # Статус верификации (KYC)
-    verified = "✅ Верифицирован" if user.get("kycStatus") == "VERIFIED" else "❌ Не верифицирован"
-    
-    # Регистрация
-    created_at = user.get("createdAt", "Неизвестно")
-    if created_at != "Неизвестно":
-        from datetime import datetime
-        try:
-            dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-            created_at = dt.strftime("%d.%m.%Y %H:%M")
-        except:
-            pass
-    
-    # Получаем статистику
-    orders = await starvell.get_orders()
-    total_orders = len(orders)
-    active_orders = sum(1 for o in orders if str(o.get("status")).upper() not in ["COMPLETED", "CANCELLED"])
-    
-    # Статистика по отзывам
-    reviews = [o.get("review") for o in orders if o.get("review")]
-    # Если нет отзывов по заказам, берем общий рейтинг из профиля
-    if reviews:
-        avg_rating = sum(r.get("rating", 0) for r in reviews) / len(reviews)
-    else:
-        avg_rating = user.get("rating", 0)
-    
-    text = f"👤 <b>Профиль</b>\n\n"
-    text += f"<b>Имя:</b> {username}\n"
-    text += f"<b>ID:</b> <code>{user_id}</code>\n"
-    text += f"<b>Статус:</b> {verified}\n"
-    text += f"<b>Регистрация:</b> {created_at}\n\n"
-    text += f"💰 <b>Баланс:</b>\n"
-    text += f"├ Доступно: <code>{_safe_float(balance):.2f}</code> ₽\n"
-    text += f"├ Заморожено: <code>{_safe_float(hold_balance):.2f}</code> ₽\n"
-    text += f"└ Всего: <code>{_safe_float(balance + hold_balance):.2f}</code> ₽\n\n"
-    text += f"📦 <b>Заказы:</b>\n"
-    text += f"├ Всего: <code>{total_orders}</code>\n"
-    text += f"⭐ <b>Средняя оценка:</b> <code>{avg_rating:.2f}</code>"
-    
-    # Кнопки
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="📊 Подробная статистика",
-            callback_data="profile_stats"
-        )],
-        [InlineKeyboardButton(
-            text="🔄 Обновить",
-            callback_data="profile_refresh"
-        )],
-        [InlineKeyboardButton(
-            text="🔙 Назад",
-            callback_data=CBT.MAIN
-        )]
-    ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
+
+    try:
+        user_info = await starvell.get_user_info()
+        if not user_info.get("authorized"):
+            await callback.answer("❌ Не авторизован", show_alert=True)
+            return
+
+        user = user_info.get("user", {})
+        orders = await starvell.get_orders()
+        text = _build_profile_text(user, orders=orders)
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="📊 Подробная статистика",
+                callback_data="profile_stats"
+            )],
+            [InlineKeyboardButton(
+                text="🔄 Обновить",
+                callback_data="profile_refresh"
+            )],
+            [InlineKeyboardButton(
+                text="🔙 Назад",
+                callback_data=CBT.MAIN
+            )]
+        ])
+
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
 
 @router.message(Command("keepalive"))
@@ -1091,21 +1044,15 @@ async def callback_switch_use_watermark(callback: CallbackQuery):
     status = "включено" if not current else "выключено"
     await callback.answer(f"Использование вотермарки {status}", show_alert=False)
 
-    # Обновляем меню
-    auto_bump = BotConfig.AUTO_BUMP_ENABLED()
-    auto_delivery = BotConfig.AUTO_DELIVERY_ENABLED()
-    auto_restore = BotConfig.AUTO_RESTORE_ENABLED()
-    auto_read = BotConfig.AUTO_READ_ENABLED()
-    auto_ticket = BotConfig.AUTO_TICKET_ENABLED()
-    auto_install = BotConfig.AUTO_UPDATE_INSTALL()
-    order_confirm = BotConfig.ORDER_CONFIRM_RESPONSE_ENABLED()
-    review_response = BotConfig.REVIEW_RESPONSE_ENABLED()
-
-    status_text = "⚙️ <b>Глобальные переключатели</b>\n\nЗдесь вы можете включать и отключать основные функции бота."
-
+    enabled = BotConfig.USE_WATERMARK()
+    watermark = BotConfig.WATERMARK()
+    from bot.keyboards import get_watermark_menu
     await callback.message.edit_text(
-        status_text,
-        reply_markup=get_global_switches_menu(auto_bump, auto_delivery, auto_restore, auto_read, auto_ticket, auto_install, order_confirm, review_response)
+        "💧 <b>Вотермарка</b>\n\n"
+        f"<b>Статус:</b> {'включено ✅' if enabled else 'выключено ❌'}\n"
+        f"<b>Текст:</b> <code>{watermark}</code>\n\n"
+        "Добавляется в начало сообщений, которые бот отправляет покупателям в Starvell.",
+        reply_markup=get_watermark_menu(enabled, watermark),
     )
 
 
@@ -1311,22 +1258,17 @@ def _proxy_menu_text() -> str:
     has_auth = bool(BotConfig.PROXY_LOGIN())
     addr = f"{ip}:{port}" if (ip and port) else "не задан"
     return (
-        "🌐 <b>Прокси для Telegram</b>\n\n"
-        "Позволяет боту подключаться к Telegram через прокси — полезно, если "
-        "Telegram заблокирован у провайдера (напр. в РФ).\n\n"
-        "Поддерживаются типы прокси:\n"
+        "🌐 <b>Прокси (Telegram + Starvell)</b>\n\n"
+        "Один прокси используется и для Telegram-бота, и для запросов к Starvell API.\n\n"
+        "Поддерживаются типы:\n"
         "• SOCKS5 (рекомендуется)\n"
         "• SOCKS4\n"
         "• HTTP / HTTPS\n\n"
-        "Настроить прокси можно:\n"
-        "• В мастере установки (Setup)\n"
-        "• В этом меню — все настройки через инлайн-кнопки\n\n"
         f"<b>Статус:</b> {'✅ Включён' if enabled else '❌ Выключен'}\n"
         f"<b>Тип:</b> {ptype}\n"
         f"<b>Адрес:</b> {addr}\n"
         f"<b>Авторизация:</b> {'задана' if has_auth else 'нет'}\n\n"
-        "⚠️ После изменения прокси перезапустите бота (/restart), "
-        "чтобы прокси применился к подключению Telegram."
+        "⚠️ После изменения прокси перезапустите бота (/restart)."
     )
 
 

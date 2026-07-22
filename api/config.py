@@ -47,7 +47,9 @@ class Config:
         user_agent: Optional[str] = None,
         timeout: Optional[int] = None,
         max_retries: Optional[int] = None,
+        proxy_url: Optional[str] = None,
     ):
         self.user_agent = user_agent or self.DEFAULT_USER_AGENT
         self.timeout = timeout or self.DEFAULT_TIMEOUT
         self.max_retries = max_retries or self.MAX_RETRIES
+        self.proxy_url = (proxy_url or "").strip() or None

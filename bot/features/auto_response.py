@@ -3,12 +3,17 @@
 """
 
 import logging
-from typing import Dict, Set, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Set, Optional, Any
+
 from bot.core.config import BotConfig, get_config_manager
 from bot.core.services import StarvellService
 from bot.core.storage import Database
 
 logger = logging.getLogger("AutoResponse")
+
+# Москва = UTC+3 (как в плагине auto_review_comment)
+_MSK = timezone(timedelta(hours=3))
 
 
 class AutoResponseService:
@@ -49,11 +54,11 @@ class AutoResponseService:
                 if not order_id:
                     continue
                 
-                status = order.get("status", "")
+                status = str(order.get("status", "")).upper()
                 review = order.get("review")
                 
                 # Добавляем завершённые заказы в обработанные
-                if status == "COMPLETED" or status == "completed":
+                if status == "COMPLETED":
                     self._confirmed_orders.add(order_id)
                 
                 # Добавляем заказы с отзывами в обработанные
@@ -102,10 +107,10 @@ class AutoResponseService:
         Проверить, нужно ли отправить ответ на подтверждение заказа
         """
         order_id = order.get("id")
-        status = order.get("status", "")
+        status = str(order.get("status", "")).upper()
         
         # Заказ должен быть завершён (COMPLETED)
-        if status != "COMPLETED" and status != "completed":
+        if status != "COMPLETED":
             return
         
         # Проверяем, не отправляли ли уже ответ
@@ -156,16 +161,35 @@ class AutoResponseService:
         except Exception as e:
             logger.error(f"Ошибка при отправке ответа на подтверждение заказа {order_id}: {e}")
             # Не добавляем в обработанные, чтобы попробовать ещё раз
+
+    def _format_review_reply(self, template: str) -> str:
+        """Подставить {date} (МСК) и безопасный format без KeyError."""
+        date_str = datetime.now(_MSK).strftime("%d.%m.%Y %H:%M")
+        try:
+            return template.format(date=date_str)
+        except (KeyError, ValueError, IndexError):
+            return template.replace("{date}", date_str)
+
+    def _extract_review(self, order: Dict, page_props: Dict) -> Optional[Dict[str, Any]]:
+        """Достать объект отзыва из списка заказов или деталей."""
+        review = page_props.get("review")
+        if isinstance(review, dict) and review.get("id"):
+            return review
+        review = order.get("review")
+        if isinstance(review, dict) and review.get("id"):
+            return review
+        return None
             
     async def _check_review_response(self, order: Dict):
         """
-        Проверить, нужно ли отправить ответ на отзыв
+        Проверить, нужно ли опубликовать ответ продавца на отзыв
+        (через /api/review-responses/create — как в плагине auto_review_comment).
         """
         order_id = order.get("id")
         
-        # Проверяем, есть ли отзыв
-        review = order.get("review")
-        if not review:
+        # Есть ли намёк на отзыв в списке заказов
+        review_hint = order.get("review")
+        if not review_hint:
             return
         
         # Проверяем, не отправляли ли уже ответ
@@ -179,43 +203,45 @@ class AutoResponseService:
             blacklist_section = f"Blacklist.{buyer_id}"
             if config._config.has_section(blacklist_section):
                 logger.debug(f"Автоответ на отзыв заказа {order_id[:8]} пропущен (покупатель {buyer_id} в ЧС)")
-                self._reviewed_orders.add(order_id)  # Помечаем как обработанный
+                self._reviewed_orders.add(order_id)
                 return
         
         try:
-            # Получаем детали заказа для получения chat_id
+            if not self.starvell.api:
+                logger.warning("API не инициализирован для ответа на отзыв")
+                return
+
             order_details = await self.starvell.get_order_details(order_id)
-            
-            # Извлекаем chat_id
-            chat_id = None
-            page_props = order_details.get("pageProps", {})
-            
-            # Пробуем разные варианты
-            if "chat" in page_props and isinstance(page_props["chat"], dict):
-                chat_id = page_props["chat"].get("id")
-            elif "chatId" in order:
-                chat_id = order.get("chatId")
-            elif "chat_id" in order:
-                chat_id = order.get("chat_id")
-                
-            if not chat_id:
-                logger.warning(f"Не удалось найти chat_id для заказа {order_id} (отзыв)")
-                # Помечаем как обработанный, чтобы не спамить логи
+            page_props = order_details.get("pageProps", {}) or {}
+            review = self._extract_review(order, page_props)
+
+            if not review:
+                logger.debug(f"Отзыв для заказа {order_id[:8]} ещё не доступен в деталях")
+                return
+
+            review_id = str(review.get("id"))
+            if review.get("sellerReply") or review.get("seller_reply"):
+                logger.info(f"⏭ Заказ {order_id[:8]}: ответ на отзыв уже есть")
                 self._reviewed_orders.add(order_id)
                 return
-            
-            # Получаем информацию об отзыве
+
             rating = review.get("rating", "N/A")
-            comment = review.get("comment", "")
-            
-            # Отправляем ответ
-            response_text = BotConfig.REVIEW_RESPONSE_TEXT()
-            await self.starvell.send_message(chat_id, response_text)
-            
-            # Помечаем как обработанный
+            reply_text = self._format_review_reply(BotConfig.REVIEW_RESPONSE_TEXT())
+
+            result = await self.starvell.api.create_review_response(
+                review_id=review_id,
+                text=reply_text,
+                order_id=order_id,
+            )
+
             self._reviewed_orders.add(order_id)
-            
-            logger.info(f"⭐ Отправлен автоответ на отзыв (рейтинг: {rating}) для заказа {order_id[:8]}")
+            if isinstance(result, dict) and result.get("already_replied"):
+                logger.info(f"⏭ Отзыв {review_id}: ответ уже был на сайте")
+            else:
+                logger.info(
+                    f"⭐ Опубликован ответ на отзыв (рейтинг: {rating}) "
+                    f"для заказа {order_id[:8]}"
+                )
             
         except Exception as e:
             logger.error(f"Ошибка при отправке ответа на отзыв для заказа {order_id}: {e}")

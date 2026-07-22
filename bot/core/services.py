@@ -28,11 +28,19 @@ class StarvellService:
         
     async def start(self):
         """Запустить сервис"""
+        proxy_url = BotConfig.PROXY_URL() or None
         self.api = StarAPI(
             session_cookie=BotConfig.STARVELL_SESSION(),
-            user_agent=BotConfig.USER_AGENT()
+            user_agent=BotConfig.USER_AGENT(),
+            proxy_url=proxy_url,
         )
         await self.api.session.start()
+        if proxy_url:
+            import logging
+            _safe = proxy_url
+            if "@" in _safe:
+                _safe = _safe.split("://", 1)[0] + "://***@" + _safe.split("@", 1)[1]
+            logging.getLogger(__name__).info(f"🌐 Starvell API через прокси: {_safe}")
         self.chat_listener = ChatListener(self)
         # Сбрасываем флаг при старте/перезапуске
         # self._session_error_notified = False  # Закомментировано - уведомление только 1 раз за всё время

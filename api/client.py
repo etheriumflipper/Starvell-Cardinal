@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from .config import Config
 from .session import SessionManager
 from .utils import BuildIdCache, extract_build_id, extract_next_data
-from .exceptions import NotFoundError, ForbiddenError, StarAPIError
+from .exceptions import NotFoundError, ForbiddenError, AuthenticationError, StarAPIError
 
 logger = logging.getLogger("API")
 
@@ -35,6 +35,7 @@ class StarAPI:
         session_cookie: str,
         user_agent: Optional[str] = None,
         timeout: Optional[int] = None,
+        proxy_url: Optional[str] = None,
     ):
         """
         Инициализация клиента
@@ -43,8 +44,9 @@ class StarAPI:
             session_cookie: Cookie сессии пользователя
             user_agent: Кастомный User-Agent (опционально)
             timeout: Таймаут запросов в секундах (опционально)
+            proxy_url: Прокси URL (socks5/http), опционально
         """
-        self.config = Config(user_agent=user_agent, timeout=timeout)
+        self.config = Config(user_agent=user_agent, timeout=timeout, proxy_url=proxy_url)
         self.session = SessionManager(session_cookie, self.config)
         self._build_id_cache = BuildIdCache(ttl=self.config.BUILD_ID_CACHE_TTL)
         self._socket_io_available: Optional[bool] = None
@@ -794,6 +796,57 @@ class StarAPI:
             params=f"?order_id={order_id}",
             include_sid=True,
         )
+
+    async def create_review_response(
+        self,
+        review_id: str,
+        text: str,
+        order_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Опубликовать ответ продавца на отзыв.
+
+        Args:
+            review_id: ID отзыва
+            text: Текст ответа
+            order_id: ID заказа (для Referer)
+
+        Returns:
+            dict: Ответ API или {"ok": True, "already_replied": True}
+        """
+        referer = (
+            f"{self.config.BASE_URL}/order/{order_id}"
+            if order_id
+            else f"{self.config.BASE_URL}/"
+        )
+        url = f"{self.config.API_URL}/review-responses/create"
+        payloads = (
+            {"reviewId": review_id, "text": text},
+            {"reviewId": review_id, "content": text},
+            {"reviewId": review_id, "comment": text},
+        )
+        last_error: Optional[Exception] = None
+        for payload in payloads:
+            try:
+                return await self.session.post_json(
+                    url,
+                    data=payload,
+                    referer=referer,
+                    include_sid=True,
+                )
+            except StarAPIError as exc:
+                last_error = exc
+                message = str(exc).lower()
+                if "уже ответили" in message or "already" in message:
+                    return {"ok": True, "already_replied": True}
+                # Auth/forbidden — нет смысла пробовать другие ключи
+                if isinstance(exc, (AuthenticationError, ForbiddenError)):
+                    raise
+                # Пробуем следующий вариант ключа текста
+                continue
+        if last_error:
+            raise last_error
+        raise StarAPIError("Не удалось опубликовать ответ на отзыв")
         
     # ==================== Офферы ====================
     

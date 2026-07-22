@@ -13,6 +13,7 @@ from bot.keyboards import (
     get_main_menu_page_2,
     get_order_confirm_response_menu,
     get_review_response_menu,
+    get_watermark_menu,
     get_configs_menu,
     get_authorized_users_menu,
     CBT,
@@ -27,6 +28,7 @@ class EditTextStates(StatesGroup):
     """Состояния для редактирования текстов"""
     waiting_for_order_confirm_text = State()
     waiting_for_review_text = State()
+    waiting_for_watermark = State()
     waiting_for_config = State()
 
 
@@ -129,7 +131,9 @@ async def callback_review_response(callback: CallbackQuery):
         "⭐ <b>Ответ на отзыв</b>\n\n"
         f"<b>Статус:</b> {'включено ✅' if enabled else 'выключено ❌'}\n\n"
         f"<b>Текущий текст ответа:</b>\n<i>{text}</i>\n\n"
-        "При получении отзыва бот автоматически отправит это сообщение."
+        "Бот публикует ответ продавца к отзыву на сайте Starvell "
+        "(не в чат).\n"
+        "Переменная <code>{date}</code> — дата/время по МСК."
     )
     
     await callback.message.edit_text(
@@ -147,8 +151,8 @@ async def callback_edit_review_text(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         "✏️ <b>Изменение текста ответа на отзыв</b>\n\n"
-        "Отправьте новый текст сообщения, которое будет отправляться "
-        "в ответ на отзыв."
+        "Отправьте новый текст. Можно использовать <code>{date}</code> "
+        "для подстановки даты и времени (МСК)."
     )
 
 
@@ -179,6 +183,60 @@ async def process_review_text(message: Message, state: FSMContext):
     await message.answer(
         message_text,
         reply_markup=get_review_response_menu(enabled, text)
+    )
+
+
+# === Вотермарка ===
+
+@router.callback_query(F.data == CBT.WATERMARK_MENU)
+async def callback_watermark_menu(callback: CallbackQuery):
+    """Меню настройки вотермарки"""
+    await callback.answer()
+    enabled = BotConfig.USE_WATERMARK()
+    watermark = BotConfig.WATERMARK()
+    message_text = (
+        "💧 <b>Вотермарка</b>\n\n"
+        f"<b>Статус:</b> {'включено ✅' if enabled else 'выключено ❌'}\n"
+        f"<b>Текст:</b> <code>{watermark}</code>\n\n"
+        "Добавляется в начало сообщений, которые бот отправляет покупателям в Starvell."
+    )
+    await callback.message.edit_text(
+        message_text,
+        reply_markup=get_watermark_menu(enabled, watermark),
+    )
+
+
+@router.callback_query(F.data == CBT.EDIT_WATERMARK)
+async def callback_edit_watermark(callback: CallbackQuery, state: FSMContext):
+    """Начать редактирование текста вотермарки"""
+    await callback.answer()
+    await state.set_state(EditTextStates.waiting_for_watermark)
+    await callback.message.edit_text(
+        "✏️ <b>Изменение вотермарки</b>\n\n"
+        f"Текущий текст: <code>{BotConfig.WATERMARK()}</code>\n\n"
+        "Отправьте новый текст вотермарки (например эмодзи или подпись магазина)."
+    )
+
+
+@router.message(EditTextStates.waiting_for_watermark)
+async def process_watermark_text(message: Message, state: FSMContext):
+    """Сохранить новый текст вотермарки"""
+    text = (message.text or "").strip()
+    if not text or len(text) > 64:
+        await message.answer(
+            "❌ Вотермарка должна быть от 1 до 64 символов. Попробуйте ещё раз:"
+        )
+        return
+
+    BotConfig.update(**{"other.watermark": text})
+    await state.clear()
+
+    enabled = BotConfig.USE_WATERMARK()
+    await message.answer(
+        "✅ <b>Вотермарка сохранена!</b>\n\n"
+        f"<b>Статус:</b> {'включено ✅' if enabled else 'выключено ❌'}\n"
+        f"<b>Текст:</b> <code>{text}</code>",
+        reply_markup=get_watermark_menu(enabled, text),
     )
 
 

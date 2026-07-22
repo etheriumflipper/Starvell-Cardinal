@@ -56,6 +56,8 @@ class CBT:
     SWITCH_ORDER_CONFIRM = "switch:order_confirm"
     SWITCH_REVIEW_RESPONSE = "switch:review_resp"
     SWITCH_USE_WATERMARK = "switch:use_watermark"
+    WATERMARK_MENU = "watermark"
+    EDIT_WATERMARK = "edit_watermark"
     
     # Настройки авто-тикета
     AUTO_TICKET_SETTINGS = "autoticket_settings"
@@ -246,8 +248,14 @@ def get_main_menu_page_2(update_available: bool = False) -> InlineKeyboardMarkup
         ],
         [
             InlineKeyboardButton(
-                text="🌐 Прокси (Telegram)",
+                text="🌐 Прокси (Telegram + Starvell)",
                 callback_data=CBT.PROXY_MENU
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="💧 Вотермарка",
+                callback_data=CBT.WATERMARK_MENU
             ),
         ],
         [
@@ -335,8 +343,8 @@ def get_global_switches_menu(
         ],
         [
             InlineKeyboardButton(
-                text=switch_text("Использовать вотермарку", BotConfig.USE_WATERMARK()),
-                callback_data=CBT.SWITCH_USE_WATERMARK
+                text=f"💧 Вотермарка: {'вкл' if BotConfig.USE_WATERMARK() else 'выкл'}",
+                callback_data=CBT.WATERMARK_MENU
             ),
         ],
         [
@@ -1043,6 +1051,31 @@ def get_review_response_menu(enabled: bool, text: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
+def get_watermark_menu(enabled: bool, watermark: str) -> InlineKeyboardMarkup:
+    """Меню настройки вотермарки в сообщениях Starvell"""
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if enabled else '❌'} Статус: {'Включено' if enabled else 'Выключено'}",
+                callback_data=CBT.SWITCH_USE_WATERMARK
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="✏️ Изменить текст вотермарки",
+                callback_data=CBT.EDIT_WATERMARK
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔙 Назад",
+                callback_data=CBT.MAIN_PAGE_2
+            )
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
 def get_auto_ticket_settings_menu(
     enabled: bool,
     interval: int,
@@ -1112,7 +1145,7 @@ def get_welcome_menu(enabled: bool) -> InlineKeyboardMarkup:
 
 def get_proxy_menu(enabled: bool, ptype: str, ip: str, port: str,
                    has_auth: bool) -> InlineKeyboardMarkup:
-    """Меню настроек прокси для Telegram"""
+    """Меню настроек прокси для Telegram и Starvell"""
     addr = f"{ip}:{port}" if (ip and port) else "не задан"
     keyboard = [
         [

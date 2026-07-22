@@ -42,10 +42,24 @@ class SessionManager:
         await self.close()
         
     async def start(self):
-        """Создать сессию"""
+        """Создать сессию (с прокси, если задан в config.proxy_url)."""
         if self._session is None or self._session.closed:
             timeout = ClientTimeout(total=self.config.timeout)
-            self._session = aiohttp.ClientSession(timeout=timeout)
+            connector = None
+            proxy_url = getattr(self.config, "proxy_url", None)
+            if proxy_url:
+                try:
+                    from aiohttp_socks import ProxyConnector
+                    connector = ProxyConnector.from_url(proxy_url)
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "Для прокси Starvell нужен aiohttp_socks. "
+                        "Установите: pip install aiohttp_socks"
+                    ) from exc
+            self._session = aiohttp.ClientSession(
+                timeout=timeout,
+                connector=connector,
+            )
             
     async def close(self):
         """Закрыть сессию"""
