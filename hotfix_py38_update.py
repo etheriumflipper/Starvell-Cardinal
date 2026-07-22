@@ -18,8 +18,9 @@ except ImportError:
     from urllib2 import urlopen  # type: ignore
 
 REPO = "etheriumflipper/Starvell-Cardinal"
-BRANCH = "main"
-BASE = "https://raw.githubusercontent.com/{}/{}/".format(REPO, BRANCH)
+# Коммит/тег с фиксом (не /main — у raw CDN бывает кэш)
+REF = "v0.3.17"
+BASE = "https://raw.githubusercontent.com/{}/{}/".format(REPO, REF)
 
 FILES = (
     "bot/features/auto_update.py",
@@ -47,8 +48,8 @@ def try_git_pull():
         return
     cmds = [
         ["git", "remote", "set-url", "origin", "https://github.com/{}.git".format(REPO)],
-        ["git", "fetch", "origin", BRANCH],
-        ["git", "checkout", "origin/" + BRANCH, "--", "bot/features/auto_update.py", "version.py"],
+        ["git", "fetch", "origin", "main", "--tags"],
+        ["git", "checkout", REF, "--", "bot/features/auto_update.py", "version.py"],
     ]
     for cmd in cmds:
         print("$", " ".join(cmd))
@@ -57,7 +58,7 @@ def try_git_pull():
         except Exception as exc:
             print("! git шаг пропущен:", exc)
             return
-    print("✓ git checkout файлов с origin/" + BRANCH)
+    print("✓ git checkout файлов с", REF)
 
 
 def main():

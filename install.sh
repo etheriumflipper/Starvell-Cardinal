@@ -8,7 +8,7 @@ APP_GROUP="starvell"
 INSTALL_DIR="/opt/starvell-cardinal"
 ENV_FILE="/etc/starvell-cardinal.env"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-REPOSITORY_URL="https://github.com/etheriumflipper/StarvellCardinal.git"
+REPOSITORY_URL="https://github.com/etheriumflipper/Starvell-Cardinal.git"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_SOURCE_DIR="$SOURCE_DIR"
 SELF_ARGS=("$@")
@@ -160,7 +160,7 @@ write_env_file() {
 # Optional update source for Starvell Cardinal.
 # Example:
 # STARVELL_VERSION_URL=https://example.com/version.py
-STARVELL_VERSION_URL=https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/version.py
+STARVELL_VERSION_URL=https://raw.githubusercontent.com/etheriumflipper/Starvell-Cardinal/main/version.py
 EOF
     fi
 
