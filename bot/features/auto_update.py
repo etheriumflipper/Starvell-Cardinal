@@ -20,6 +20,15 @@ PROTECTED_DIRS = ("configs", "storage", "plugins", "logs", "docs")
 GIT_BRANCH = "main"
 
 
+async def _run_sync(func, *args):
+    """Запуск блокирующей функции вне event loop (совместимо с Python 3.8)."""
+    to_thread = getattr(asyncio, "to_thread", None)
+    if to_thread is not None:
+        return await to_thread(func, *args)
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: func(*args))
+
+
 class AutoUpdateService:
     """
     Сервис автоматического обновления бота
@@ -389,7 +398,7 @@ class AutoUpdateService:
                 ]
 
             if not (repo_path / ".git").exists():
-                repaired, repair_error = await asyncio.to_thread(
+                repaired, repair_error = await _run_sync(
                     self._repair_git_repository_sync, repo_path
                 )
                 if not repaired:
@@ -406,7 +415,7 @@ class AutoUpdateService:
                         "output": repair_error or "Директория .git не найдена",
                     }
             else:
-                await asyncio.to_thread(self._ensure_git_remote_sync, repo_path)
+                await _run_sync(self._ensure_git_remote_sync, repo_path)
             
             # Сохраняем текущую ветку
             result = subprocess.run(
