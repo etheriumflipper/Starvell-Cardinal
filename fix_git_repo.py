@@ -17,7 +17,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-REPO_URL = "https://github.com/etheriumflipper/StarvellCardinal.git"
+REPO_URL = "https://github.com/etheriumflipper/Starvell-Cardinal.git"
 BRANCH = "main"
 
 # Папки, которые нужно сохранить (твои личные данные)
