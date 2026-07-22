@@ -1,0 +1,26 @@
+name: Python 3.8 compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  py38-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Static ban on 3.9+ APIs
+        run: python scripts/check_py38_compat.py
+      - name: Compile all modules under 3.8
+        run: |
+          python -m compileall -q api bot main.py version.py first_setup.py
+      - name: Import py38_compat polyfill
+        run: |
+          python -c "import asyncio; import bot.core.py38_compat; assert hasattr(asyncio, 'to_thread'); print('to_thread ok')"

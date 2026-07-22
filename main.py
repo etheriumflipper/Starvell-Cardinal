@@ -8,6 +8,10 @@ import time
 import logging
 import asyncio
 from pathlib import Path
+
+# Python 3.8 compat (asyncio.to_thread и т.п.) — ДО остальных импортов бота
+from bot.core import py38_compat  # noqa: F401
+
 from version import VERSION
 
 

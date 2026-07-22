@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime, timedelta
 
+# На случай импорта вне main.py (тесты / ручной вызов)
+from bot.core import py38_compat  # noqa: F401
+
 from version import VERSION, VERSION_URL, REPOSITORY_URL
 from bot.core.config import BotConfig
 
