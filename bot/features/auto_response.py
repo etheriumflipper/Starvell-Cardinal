@@ -179,6 +179,18 @@ class AutoResponseService:
         if isinstance(review, dict) and review.get("id"):
             return review
         return None
+
+    def _extract_chat_id(self, order: Dict, page_props: Dict) -> Optional[str]:
+        """Достать chat_id заказа из списка или деталей заказа."""
+        chat = page_props.get("chat")
+        if isinstance(chat, dict) and chat.get("id"):
+            return str(chat.get("id"))
+        for source in (page_props, order):
+            for key in ("chat_id", "chatId"):
+                value = source.get(key)
+                if value:
+                    return str(value)
+        return None
             
     async def _check_review_response(self, order: Dict):
         """
@@ -233,6 +245,19 @@ class AutoResponseService:
                 text=reply_text,
                 order_id=order_id,
             )
+
+            chat_id = self._extract_chat_id(order, page_props)
+            if chat_id:
+                try:
+                    await self.starvell.send_message(chat_id, reply_text)
+                    logger.info(f"💬 Отправлен автоответ в чат по отзыву заказа {order_id[:8]}")
+                except Exception as chat_error:
+                    logger.warning(
+                        f"Ответ на отзыв опубликован, но сообщение в чат заказа "
+                        f"{order_id[:8]} не отправлено: {chat_error}"
+                    )
+            else:
+                logger.debug(f"Не найден chat_id для автоответа в чат по отзыву заказа {order_id[:8]}")
 
             self._reviewed_orders.add(order_id)
             if isinstance(result, dict) and result.get("already_replied"):

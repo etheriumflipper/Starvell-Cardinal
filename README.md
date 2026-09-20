@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Cardinal-v0.3.19-C41E3A?style=flat-square&labelColor=1a0a0d" />
+  <img src="https://img.shields.io/badge/Cardinal-v0.3.20-C41E3A?style=flat-square&labelColor=1a0a0d" />
   <img src="https://img.shields.io/badge/Python-3.8+-FFD700?style=flat-square&labelColor=1a0a0d&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-2d1b1f?style=flat-square&labelColor=1a0a0d" />
   <img src="https://img.shields.io/badge/License-MIT-8B0000?style=flat-square&labelColor=1a0a0d" />
@@ -218,6 +218,7 @@ StarvellCardinal/
 
 | Ver | Highlights |
 |:---:|:---|
+| **0.3.20** | `/anon_stats` считает все привязанные Starvell-аккаунты Cardinal по cookie: общий баланс, заморозку и отзывы · пофикшен автоответ на отзыв и автоответ в чат заказа при отзыве |
 | **0.3.19** | Улучшен сбор анонимной информации: владелец может смотреть агрегаты по пользователям, балансам и отзывам без ID и ников |
 | **0.3.18** | Расширение стабильности и внутренних исправлений |
 | **0.3.8** | Авто-починка git при `/update` · install.sh настраивает `.git` |
