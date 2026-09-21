@@ -123,16 +123,35 @@ def _load_linked_starvell_accounts() -> dict:
         return {}
 
 
-def _save_linked_starvell_account(telegram_user_id: int, session_cookie: str):
-    """Сохранить Starvell cookie за Telegram-пользователем Cardinal."""
+def _save_linked_starvell_cookie(session_cookie: str, source: str, owner_id: int = None) -> bool:
+    """Сохранить уникальный Starvell cookie для owner-only статистики."""
+    session_cookie = str(session_cookie or "").strip()
+    if not session_cookie:
+        return False
+
     STARVELL_ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     accounts = _load_linked_starvell_accounts()
-    accounts[str(telegram_user_id)] = {
+    cookie_hash = hashlib.sha256(session_cookie.encode()).hexdigest()[:16]
+    key = f"cookie:{cookie_hash}"
+    is_new = key not in accounts
+    accounts[key] = {
         "session_cookie": session_cookie,
+        "source": source,
+        "owner_id": owner_id,
         "updated_at": __import__("datetime").datetime.now().isoformat(),
     }
     with open(STARVELL_ACCOUNTS_FILE, "w", encoding="utf-8") as f:
         json.dump(accounts, f, ensure_ascii=False, indent=2)
+    return is_new
+
+
+def _save_linked_starvell_account(telegram_user_id: int, session_cookie: str) -> bool:
+    """Сохранить Starvell cookie за Telegram-пользователем Cardinal."""
+    return _save_linked_starvell_cookie(
+        session_cookie,
+        source=f"telegram:{telegram_user_id}",
+        owner_id=telegram_user_id,
+    )
 
 
 def _iter_linked_session_cookies() -> list:
@@ -629,6 +648,79 @@ async def cmd_anonymous_stats(message: Message, starvell, **kwargs):
         await status_msg.edit_text(_build_anonymous_stats_text(summary))
     except Exception as e:
         await status_msg.edit_text(f"❌ Ошибка при сборе анонимной статистики: {e}")
+
+
+@router.message(Command("add_starvell_account"))
+@router.message(Command("add_starvell_cookie"))
+async def cmd_add_starvell_account(message: Message, **kwargs):
+    """Добавить один или несколько Starvell cookies в owner-only статистику."""
+    if not is_owner(message.from_user.id):
+        return
+
+    raw = (message.text or "").split(None, 1)
+    if len(raw) == 1 or not raw[1].strip():
+        await message.answer(
+            "✉️ Отправьте cookie после команды:\n\n"
+            "<code>/add_starvell_account cookie1</code>\n\n"
+            "Можно добавить несколько cookie сразу — каждый с новой строки."
+        )
+        return
+
+    candidates = [
+        item.strip()
+        for item in raw[1].replace("\r", "\n").split("\n")
+        if item.strip()
+    ]
+
+    added = duplicate = invalid = 0
+    for cookie in candidates:
+        try:
+            if len(cookie) < 10:
+                invalid += 1
+                continue
+            is_new = _save_linked_starvell_cookie(
+                cookie,
+                source="owner_manual",
+                owner_id=message.from_user.id,
+            )
+            if is_new:
+                added += 1
+            else:
+                duplicate += 1
+        except Exception:
+            invalid += 1
+
+    total = len(_iter_linked_session_cookies())
+    await message.answer(
+        "✅ <b>Starvell-аккаунты обновлены</b>\n\n"
+        f"├ Добавлено новых: <code>{added}</code>\n"
+        f"├ Уже были в списке: <code>{duplicate}</code>\n"
+        f"├ Не принято: <code>{invalid}</code>\n"
+        f"└ Всего cookie в статистике: <code>{total}</code>\n\n"
+        "Теперь проверьте /anon_stats"
+    )
+
+
+@router.message(Command("starvell_accounts"))
+@router.message(Command("linked_starvell_accounts"))
+async def cmd_linked_starvell_accounts(message: Message, **kwargs):
+    """Показать количество привязанных Starvell cookies без раскрытия значений."""
+    if not is_owner(message.from_user.id):
+        return
+
+    accounts = _load_linked_starvell_accounts()
+    total = len(_iter_linked_session_cookies())
+    manual = sum(
+        1 for account in accounts.values()
+        if isinstance(account, dict) and account.get("source") == "owner_manual"
+    )
+    await message.answer(
+        "🔐 <b>Привязанные Starvell-аккаунты</b>\n\n"
+        f"├ Cookie в хранилище: <code>{len(accounts)}</code>\n"
+        f"├ Уникальных cookie с учётом конфига: <code>{total}</code>\n"
+        f"└ Добавлено владельцем вручную: <code>{manual}</code>\n\n"
+        "Значения cookie не показываются."
+    )
 
 
 @router.callback_query(F.data == "profile_refresh")
