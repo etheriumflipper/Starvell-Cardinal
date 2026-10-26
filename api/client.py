@@ -710,7 +710,7 @@ class StarAPI:
         Returns:
             list: Список всех заказов с информацией о покупателях
         """
-        payload = {"filter": {}}
+        payload = {"filter": {"userType": "seller"}, "with": {"buyer": True}, "limit": 100, "offset": 0}
         if status:
             payload["filter"]["status"] = status
         
@@ -721,7 +721,23 @@ class StarAPI:
         )
         
         if not isinstance(all_orders, list):
-            all_orders = []
+            raise StarAPIError("orders/list returned non-list response")
+        seen_ids = {str(order.get("id")) for order in all_orders}
+        page = all_orders
+        while len(page) == 100:
+            payload["offset"] += 100
+            page = await self.session.post_json(
+                f"{self.config.API_URL}/orders/list", data=payload,
+                referer=f"{self.config.BASE_URL}/account/sells")
+            if not isinstance(page, list):
+                raise StarAPIError("orders/list pagination returned non-list response")
+            fresh = [order for order in page if str(order.get("id")) not in seen_ids]
+            if page and not fresh:
+                raise StarAPIError("orders/list pagination repeated page")
+            all_orders.extend(fresh)
+            seen_ids.update(str(order.get("id")) for order in fresh)
+        from logging import getLogger
+        getLogger("API").info("Orders poll OK role=seller count=%s pages=%s", len(all_orders), payload["offset"] // 100 + 1)
         
         try:
             data = await self._get_next_data("account/sells.json")
