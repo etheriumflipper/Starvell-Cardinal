@@ -82,6 +82,8 @@ HTTP keep-alive
 wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/install.sh -O install.sh && bash install.sh
 ```
 
+> Нет Linux-сервера? Его можно арендовать в [Xorek Cloud](https://xorek.cloud/?from=63167). При регистрации также можно использовать промокод `r63167`.
+
 <details>
 <summary><b>🐧 Linux / VPS (рекомендуется)</b></summary>
 
