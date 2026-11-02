@@ -281,7 +281,27 @@ class BotConfig:
     
     @staticmethod
     def ADMIN_IDS() -> list:
-        return _config_manager.get('Telegram', 'adminIds', [])
+        import logging
+        value = _config_manager.get('Telegram', 'adminIds', [])
+        if isinstance(value, int) and not isinstance(value, bool):
+            logging.getLogger(__name__).warning(
+                "Telegram.adminIds содержит одно число; используйте список в формате [123456789]."
+            )
+            return [value] if value > 0 else []
+        if isinstance(value, (list, tuple)):
+            result = []
+            for item in value:
+                if isinstance(item, int) and not isinstance(item, bool) and item > 0:
+                    result.append(item)
+                elif isinstance(item, str) and item.isdecimal() and int(item) > 0:
+                    result.append(int(item))
+                else:
+                    logging.getLogger(__name__).warning("Telegram.adminIds содержит некорректный элемент, он пропущен.")
+            return result
+        logging.getLogger(__name__).error(
+            "Некорректный Telegram.adminIds: нужен список числовых ID, например [123456789]; доступ запрещён."
+        )
+        return []
     
     @staticmethod
     def set_admin_ids(admin_ids: list):
