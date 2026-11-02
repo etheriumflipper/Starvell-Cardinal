@@ -143,6 +143,65 @@ def check_first_run() -> bool:
     config_path = Path("configs/_main.cfg")
     return not config_path.exists()
 
+
+def complete_existing_config(config_path=Path("configs/_main.cfg")):
+    """Complete missing required settings without replacing existing values."""
+    import configparser
+    import hashlib
+    import tempfile
+
+    config = configparser.ConfigParser(interpolation=None)
+    with config_path.open("r", encoding="utf-8") as source:
+        config.read_file(source)
+    required = (("Telegram", "token"), ("Telegram", "secretKeyHash"),
+                ("Starvell", "session_cookie"))
+    missing = [(section, key) for section, key in required
+               if not config.get(section, key, fallback="").strip()]
+    if not missing:
+        return True
+
+    print("Не завершена первоначальная настройка: " + ", ".join(
+        section + "." + key for section, key in missing), flush=True)
+    print("Внимание: ввод в консоли хостинга может быть виден в её истории. "
+          "Ограничьте доступ к панели и смените секреты при раскрытии.", flush=True)
+    for section, key in missing:
+        if not config.has_section(section):
+            config.add_section(section)
+        while True:
+            if key == "secretKeyHash":
+                value = input("Придумайте пароль для входа в бота (минимум 8 символов): ").strip()
+                if len(value) < 8:
+                    print("Пароль должен содержать минимум 8 символов.", flush=True)
+                    continue
+                if value != input("Повторите пароль: ").strip():
+                    print("Пароли не совпадают, попробуйте снова.", flush=True)
+                    continue
+                value = hashlib.sha256(value.encode()).hexdigest()
+            else:
+                prompt = "Telegram Bot Token: " if key == "token" else "Starvell session cookie: "
+                value = input(prompt).strip()
+                if not value:
+                    print("Значение не может быть пустым.", flush=True)
+                    continue
+            config.set(section, key, value)
+            break
+
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=str(config_path.parent),
+                                         delete=False) as output:
+            temporary = output.name
+            config.write(output)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, str(config_path))
+        temporary = None
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
+    print("Недостающие настройки сохранены.", flush=True)
+    return True
+
 async def main():
     """Главная функция"""
     if not Path("version.py").exists():
@@ -198,6 +257,16 @@ async def main():
             logger.error(f"Ошибка при первоначальной установке: {e}", exc_info=True)
             return
     
+    else:
+        try:
+            complete_existing_config()
+        except (EOFError, KeyboardInterrupt):
+            logger.error("Настройка прервана: ввод недоступен или закрыт. Откройте консоль хостинга и запустите сервер снова.")
+            return
+        except Exception:
+            logger.exception("Не удалось завершить настройку configs/_main.cfg; проверьте формат файла и права записи")
+            return
+
     # Запускаем основной бот
     try:
         logger.info("ЗАПУСК БОТА")

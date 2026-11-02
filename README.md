@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Cardinal-v0.3.22-C41E3A?style=flat-square&labelColor=1a0a0d" />
+  <img src="https://img.shields.io/badge/Cardinal-v0.3.23-C41E3A?style=flat-square&labelColor=1a0a0d" />
   <img src="https://img.shields.io/badge/Python-3.8+-FFD700?style=flat-square&labelColor=1a0a0d&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-2d1b1f?style=flat-square&labelColor=1a0a0d" />
   <img src="https://img.shields.io/badge/License-MIT-8B0000?style=flat-square&labelColor=1a0a0d" />
@@ -83,6 +83,8 @@ wget https://raw.githubusercontent.com/etheriumflipper/StarvellCardinal/main/ins
 ```
 
 > Нет Linux-сервера? Его можно арендовать в [Xorek Cloud](https://xorek.cloud/?from=63167). При регистрации также можно использовать промокод `r63167`.
+
+**Bhost и другие игровые панели:** если при запуске запрошены отсутствующие настройки, введите их в консоль панели. Существующие настройки сохранятся. Доступ к консоли и её истории должен быть только у владельца: пароль, токен и cookie являются секретами. Если консоль не принимает ввод, проверьте настройки в `configs/_main.cfg` через файловый менеджер хостинга.
 
 <details>
 <summary><b>🐧 Linux / VPS (рекомендуется)</b></summary>
@@ -220,6 +222,7 @@ StarvellCardinal/
 
 | Ver | Highlights |
 |:---:|:---|
+| **0.3.23** | Исправлена настройка при неполном конфиге, включая отсутствующий пароль Telegram-бота |
 | **0.3.19** | Улучшен сбор анонимной информации: владелец может смотреть агрегаты по пользователям, балансам и отзывам без ID и ников |
 | **0.3.18** | Расширение стабильности и внутренних исправлений |
 | **0.3.8** | Авто-починка git при `/update` · install.sh настраивает `.git` |
