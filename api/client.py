@@ -70,11 +70,21 @@ class StarAPI:
     async def _get_build_id(self) -> str:
         """Получить build_id (с кэшированием)"""
         async def fetch():
-            html = await self.session.get_text(
-                f"{self.config.BASE_URL}/",
-                headers={"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+            errors = []
+            for path in ("/", "/chat", "/account/sells"):
+                try:
+                    html = await self.session.get_text(
+                        f"{self.config.BASE_URL}{path}",
+                        headers={"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+                    )
+                    return extract_build_id(html)
+                except (ValueError, StarAPIError) as exc:
+                    errors.append(f"{path}: {type(exc).__name__}")
+            raise StarAPIError(
+                "Не удалось получить buildId Starvell со страниц "
+                + ", ".join(errors)
+                + ". Возможно, сайт вернул страницу защиты или изменил формат."
             )
-            return extract_build_id(html)
             
         return await self._build_id_cache.get(fetch)
         

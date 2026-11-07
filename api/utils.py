@@ -4,6 +4,7 @@ import re
 import json
 import time
 import asyncio
+from html.parser import HTMLParser
 from typing import Optional
 
 
@@ -36,19 +37,38 @@ class BuildIdCache:
         self._cached_at = 0.0
 
 
+class _NextDataParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.collecting = False
+        self.found = False
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "script" and dict(attrs).get("id") == "__NEXT_DATA__":
+            self.collecting = True
+            self.found = True
+
+    def handle_data(self, data):
+        if self.collecting:
+            self.parts.append(data)
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "script" and self.collecting:
+            self.collecting = False
+
+
 def extract_next_data(html: str) -> dict:
     """Извлечь данные из __NEXT_DATA__ скрипта"""
-    match = re.search(
-        r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
-        html,
-        re.DOTALL
-    )
-    
-    if not match:
+    parser = _NextDataParser()
+    parser.feed(html)
+    if not parser.found:
         raise ValueError("Не найден __NEXT_DATA__ скрипт в HTML")
         
     try:
-        data = json.loads(match.group(1))
+        data = json.loads("".join(parser.parts))
+        if not isinstance(data, dict):
+            raise ValueError("Некорректный формат __NEXT_DATA__: ожидается объект")
         return data
     except json.JSONDecodeError as e:
         raise ValueError(f"Ошибка парсинга __NEXT_DATA__: {e}")
